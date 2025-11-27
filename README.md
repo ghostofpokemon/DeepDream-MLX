@@ -1,29 +1,7 @@
----
-license: mit
-tags:
-- mlx
-- computer-vision
-- art
-- generative
-pipeline_tag: image-to-image
----
+--model vgg16
 
-# DeepDream-MLX
-
-Native, hardware-accelerated DeepDream for Apple Silicon.
-We ripped out the slow parts and baked the compute graph directly into the GPU.
-
-**Status:** Fast. 
-**Vibe:** 2015 Aesthetics // 2025 Hardware.
-
-## Quick Start
-
-```bash
-# Needs typical scientific stack + mlx
-pip install mlx numpy pillow scipy
-
-# Dream
-python dream.py --input love.jpg --model vgg16
+# Dream with ALL models
+python dream.py --input love.jpg --model all
 ```
 
 ## The Models
@@ -31,7 +9,7 @@ python dream.py --input love.jpg --model vgg16
 We support the heavy hitters. Weights are converted and ready.
 
 *   **VGG16:** The Painter. Rich textures, thick brushstrokes.
-*   **GoogLeNet (InceptionV1):** The Hallucination. Eyes, animals, geometry.
+*   **GoogLeNet (InceptionV1):** The Hallucination. Eyes, animals, geometry. The classic DeepDream model.
 *   **VGG19:** The Stylist. Complex, layered patterns.
 *   **ResNet50:** The Modernist. Sharp, deep structures.
 
@@ -93,7 +71,7 @@ python dream.py --input love.jpg \
 
 ## File Structure
 
-*   `dream.py`: The engine. Compiled graph execution.
+*   `dream.py`: The engine. Compiled graph execution. Supports `model='all'` to run the full suite.
 *   `mlx_*.py`: Model definitions ported to native MLX.
 *   `*.npz`: The weights (ported by us).
 *   `export_*.py`: The bridge scripts that brought these models here.

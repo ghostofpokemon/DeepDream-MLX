@@ -219,18 +219,157 @@ def deepdream(
     return deprocess(img)
 
 
+
+
+
+def run_dream_for_model(model_name, args, img_np):
+    print(f"--- Running DeepDream with {model_name} ---")
+    
+    # Notebook presets (from notebookfc42c6db41.ipynb)
+    PRESETS = {
+        "nb14": {
+            "layers": ["relu3_3"],
+            "steps": 10,
+            "lr": 0.06,
+            "pyramid_size": 6,
+            "pyramid_ratio": 1.4,
+            "jitter": 32,
+            "smoothing_coefficient": 0.5,
+        },
+        "nb20": {
+            "layers": ["relu4_2"],
+            "steps": 10,
+            "lr": 0.06,
+            "pyramid_size": 6,
+            "pyramid_ratio": 1.4,
+            "jitter": 32,
+            "smoothing_coefficient": 0.5,
+        },
+        "nb28": {
+            "layers": ["relu5_3"],
+            "steps": 10,
+            "lr": 0.06,
+            "pyramid_size": 6,
+            "pyramid_ratio": 1.4,
+            "jitter": 32,
+            "smoothing_coefficient": 0.5,
+        },
+    }
+
+    # Set up model, weights, and defaults
+    # We create local copies of parameters that might be overridden by presets
+    current_layers = args.layers
+    current_steps = args.steps
+    current_lr = args.lr
+    current_pyramid_size = args.octaves or args.pyramid_size
+    current_pyramid_ratio = args.octave_scale or args.pyramid_ratio
+    current_jitter = args.jitter
+    current_smoothing = args.smoothing_coefficient
+
+    if model_name == "vgg16":
+        model = VGG16()
+        weights = args.weights or "vgg16_mlx.npz"
+        default_layers = ["relu4_3"]
+        if args.preset:
+            preset = PRESETS[args.preset]
+            current_layers = preset["layers"]
+            current_steps = preset["steps"]
+            current_lr = preset["lr"]
+            current_pyramid_size = preset["pyramid_size"]
+            current_pyramid_ratio = preset["pyramid_ratio"]
+            current_jitter = preset["jitter"]
+            current_smoothing = preset["smoothing_coefficient"]
+            
+    elif model_name == "vgg19":
+        model = VGG19()
+        weights = args.weights or "vgg19_mlx.npz"
+        default_layers = ["relu4_4"]
+        if args.preset and args.preset in PRESETS:
+            preset = PRESETS[args.preset]
+            # Presets technically for VGG16 but we can apply them
+            current_layers = preset["layers"]
+            current_steps = preset["steps"]
+            current_lr = preset["lr"]
+            current_pyramid_size = preset["pyramid_size"]
+            current_pyramid_ratio = preset["pyramid_ratio"]
+            current_jitter = preset["jitter"]
+            current_smoothing = preset["smoothing_coefficient"]
+            
+    elif model_name == "resnet50":
+        model = ResNet50()
+        weights = args.weights or "resnet50_mlx.npz"
+        default_layers = ["layer4_2"]
+        
+    else: # googlenet (InceptionV1)
+        model = GoogLeNet()
+        weights = args.weights or "googlenet_mlx.npz"
+        default_layers = ["inception3b", "inception4c", "inception4d"]
+
+    if not os.path.exists(weights):
+        print(f"Error: Weights NPZ not found: {weights}. Skipping {model_name}.")
+        return
+
+    model.load_npz(weights)
+
+    guide_img_np = None
+    if args.guide:
+        print(f"Using guide image: {args.guide}")
+        guide_img_np = load_image(args.guide, args.img_width)
+
+    start_time = time.time()
+    start_timestamp = datetime.now()
+
+    dreamed = deepdream(
+        model,
+        img_np,
+        layers=current_layers or default_layers,
+        steps=current_steps,
+        lr=current_lr,
+        pyramid_size=current_pyramid_size,
+        pyramid_ratio=current_pyramid_ratio,
+        jitter=current_jitter,
+        smoothing_coefficient=current_smoothing,
+        guide_img_np=guide_img_np,
+    )
+    
+    end_time = time.time()
+    elapsed = end_time - start_time
+    
+    if args.output:
+        # If explicit output is set, use it (but if running 'all', this overwrites)
+        # If running multiple models, we should probably append model name if 'all' was used.
+        # But here we just use what's passed. The caller loop handles distinct args if needed?
+        # Actually, let's just append model name if output is auto-generated.
+        # If user provided explicit output, they better know what they are doing or we overwrite.
+        # But for 'all', we ideally want distinct names.
+        # We'll handle that logic in main loop by not passing explicit output for 'all', 
+        # or ignoring it.
+        out = args.output
+    else:
+        # Elegant filename: input_dream_MODEL_ELAPSEDs_MMDD_HHMMSS.jpg
+        base_name = os.path.splitext(os.path.basename(args.input))[0]
+        formatted_time = f"{elapsed:.2f}s"
+        formatted_date = start_timestamp.strftime("%m%d")
+        formatted_timestamp = start_timestamp.strftime("%H%M%S")
+        out = f"{base_name}_dream_{model_name}_{formatted_time}_{formatted_date}_{formatted_timestamp}.jpg"
+
+    Image.fromarray(dreamed).save(out)
+    print(f"Saved {out}\n")
+
+
 def parse_args():
     p = argparse.ArgumentParser(description="DeepDream with MLX (Compiled)")
     p.add_argument("--input", required=True, help="Input image")
-    p.add_argument("--output", help="Output path")
+    p.add_argument("--output", help="Output path (ignored if model='all')")
     p.add_argument("--guide", help="Guide image for guided dreaming")
     p.add_argument("--img_width", type=int, default=None)
     p.add_argument(
         "--model",
-        choices=["vgg16", "vgg19", "googlenet", "resnet50"],
+        choices=["vgg16", "vgg19", "googlenet", "resnet50", "all"],
         default="vgg16",
-        help="Backbone model",
+        help="Backbone model. 'googlenet' is InceptionV1. 'all' runs all models.",
     )
+    # ... rest of args same as before ...
     p.add_argument(
         "--preset",
         choices=["nb14", "nb20", "nb28"],
@@ -270,121 +409,19 @@ def parse_args():
 def main():
     args = parse_args()
     
-    start_time = time.time()
-    start_timestamp = datetime.now()
-
-    # Backward-compat aliases
-    pyramid_size = args.octaves or args.pyramid_size
-    pyramid_ratio = args.octave_scale or args.pyramid_ratio
-
-    # Notebook presets (from notebookfc42c6db41.ipynb)
-    PRESETS = {
-        "nb14": {
-            "layers": ["relu3_3"],
-            "steps": 10,
-            "lr": 0.06,
-            "pyramid_size": 6,
-            "pyramid_ratio": 1.4,
-            "jitter": 32,
-            "smoothing_coefficient": 0.5,
-        },
-        "nb20": {
-            "layers": ["relu4_2"],
-            "steps": 10,
-            "lr": 0.06,
-            "pyramid_size": 6,
-            "pyramid_ratio": 1.4,
-            "jitter": 32,
-            "smoothing_coefficient": 0.5,
-        },
-        "nb28": {
-            "layers": ["relu5_3"],
-            "steps": 10,
-            "lr": 0.06,
-            "pyramid_size": 6,
-            "pyramid_ratio": 1.4,
-            "jitter": 32,
-            "smoothing_coefficient": 0.5,
-        },
-    }
-
-    if args.model == "vgg16":
-        model = VGG16()
-        weights = args.weights or "vgg16_mlx.npz"
-        default_layers = ["relu4_3"]
-        if args.preset:
-            preset = PRESETS[args.preset]
-            args.layers = preset["layers"]
-            args.steps = preset["steps"]
-            args.lr = preset["lr"]
-            pyramid_size = preset["pyramid_size"]
-            pyramid_ratio = preset["pyramid_ratio"]
-            args.jitter = preset["jitter"]
-            args.smoothing_coefficient = preset["smoothing_coefficient"]
-    elif args.model == "vgg19":
-        model = VGG19()
-        weights = args.weights or "vgg19_mlx.npz"
-        default_layers = ["relu4_4"]
-        if args.preset and args.preset in PRESETS:
-            preset = PRESETS[args.preset]
-            args.layers = preset["layers"]
-            args.steps = preset["steps"]
-            args.lr = preset["lr"]
-            pyramid_size = preset["pyramid_size"]
-            pyramid_ratio = preset["pyramid_ratio"]
-            args.jitter = preset["jitter"]
-            args.smoothing_coefficient = preset["smoothing_coefficient"]
-    elif args.model == "resnet50":
-        model = ResNet50()
-        weights = args.weights or "resnet50_mlx.npz"
-        default_layers = ["layer4_2"]
-    else:
-        model = GoogLeNet()
-        weights = args.weights or "googlenet_mlx.npz"
-        default_layers = ["inception3b", "inception4c", "inception4d"]
-
-    if not os.path.exists(weights):
-        raise FileNotFoundError(
-            f"Weights NPZ not found: {weights}. Export with the matching export_*.py script."
-        )
-
-    model.load_npz(weights)
-
     img_np = load_image(args.input, args.img_width)
 
-    guide_img_np = None
-    if args.guide:
-        print(f"Using guide image: {args.guide}")
-        guide_img_np = load_image(args.guide, args.img_width)
-
-    dreamed = deepdream(
-        model,
-        img_np,
-        layers=args.layers or default_layers,
-        steps=args.steps,
-        lr=args.lr,
-        pyramid_size=pyramid_size,
-        pyramid_ratio=pyramid_ratio,
-        jitter=args.jitter,
-        smoothing_coefficient=args.smoothing_coefficient,
-        guide_img_np=guide_img_np,
-    )
-    
-    end_time = time.time()
-    elapsed = end_time - start_time
-    
-    if args.output:
-        out = args.output
+    if args.model == 'all':
+        models = ["vgg16", "vgg19", "googlenet", "resnet50"]
+        # Ignore explicit output path to avoid overwriting
+        if args.output:
+            print("Warning: --output argument ignored because --model='all' was selected.")
+            args.output = None 
+        
+        for m in models:
+            run_dream_for_model(m, args, img_np)
     else:
-        # Elegant filename: input_dream_ELAPSEDs_MMDD_HHMMSS.jpg
-        base_name = os.path.splitext(os.path.basename(args.input))[0]
-        formatted_time = f"{elapsed:.2f}s"
-        formatted_date = start_timestamp.strftime("%m%d")
-        formatted_timestamp = start_timestamp.strftime("%H%M%S")
-        out = f"{base_name}_dream_{formatted_time}_{formatted_date}_{formatted_timestamp}.jpg"
-
-    Image.fromarray(dreamed).save(out)
-    print(f"Saved {out}")
+        run_dream_for_model(args.model, args, img_np)
 
 
 if __name__ == "__main__":
