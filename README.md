@@ -165,4 +165,4 @@ python dream.py --input love.jpg \
 We took 10-year-old model weights from PyTorch/Torchvision (often based on original Caffe implementations) and converted them directly into optimized MLX `.npz` arrays. Our custom `export_*.py` scripts handle this. This brings these classic architectures to **Apple Silicon**, clean and efficient.
 
 ---
-*NickMystic
+*NickMystic*
