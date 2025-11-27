@@ -162,7 +162,7 @@ python dream.py --input love.jpg \
 
 ## 💾 Weight Conversion & Efficiency
 
-We didn't just wrap existing libs. We wrote custom exporters (`export_*.py`) to rip weights from standard PyTorch/Torchvision archives and serialize them into optimized MLX `.npz` arrays. 
+We didn't just wrap existing libs. We wrote a custom exporter (`export_models.py`) to rip weights from standard PyTorch/Torchvision archives and serialize them into optimized MLX `.npz` arrays. 
 
 ### 50% Smaller Weights (FP16)
 We now support **Float16** (Half-Precision) weights by default. This cuts model size in half with zero visual loss for DeepDreaming.
@@ -186,9 +186,8 @@ You need to fine-tune the base model on a new dataset.
 **Current Workflow:**
 1.  Train your model in PyTorch (standard ImageNet training or custom dataset).
 2.  Save the `.pth` checkpoint.
-3.  Modify our `export_*.py` scripts to load your custom checkpoint.
-4.  Export to `.npz`.
-5.  Dream.
+3.  Use `export_models.py` to load your custom checkpoint and export to MLX.
+4.  Dream.
 
 *A dedicated `train_dream.py` script is on the roadmap.*
 
