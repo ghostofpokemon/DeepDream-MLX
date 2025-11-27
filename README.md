@@ -1,4 +1,8 @@
---- 
+---
+model_name: DeepDream-MLX
+model_description: Native, hardware-accelerated DeepDream for Apple Silicon.
+language: en
+library_name: mlx
 license: apache-2.0
 tags:
 - mlx
@@ -8,7 +12,6 @@ tags:
 - deepdream
 pipeline_tag: image-to-image
 ---
-
 # DeepDream-MLX
 
 <img src="assets/deepdream_header.jpg" alt="DeepDream Header" width="100%"/>
