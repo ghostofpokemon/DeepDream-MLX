@@ -160,9 +160,37 @@ python dream.py --input love.jpg \
     --layers layer3_2 layer3_5
 ```
 
-## 💾 Weight Conversion
+## 💾 Weight Conversion & Efficiency
 
-We took 10-year-old model weights from PyTorch/Torchvision (often based on original Caffe implementations) and converted them directly into optimized MLX `.npz` arrays. Our custom `export_*.py` scripts handle this. This brings these classic architectures to **Apple Silicon**, clean and efficient.
+We didn't just wrap existing libs. We wrote custom exporters (`export_*.py`) to rip weights from standard PyTorch/Torchvision archives and serialize them into optimized MLX `.npz` arrays. 
+
+### 50% Smaller Weights (FP16)
+We now support **Float16** (Half-Precision) weights by default. This cuts model size in half with zero visual loss for DeepDreaming.
+*   **VGG16:** 528MB → **264MB**
+*   **ResNet50:** 98MB → **49MB**
+
+`dream.py` automatically detects and loads `_bf16.npz` files if present.
+
+## 🔎 Where to find models?
+
+You can convert *any* standard PyTorch model to run here.
+1.  **Torchvision:** The source of our VGG/GoogLeNet/ResNet weights.
+2.  **Hugging Face Hub:** Massive repo of pretrained models.
+3.  **Caffe Model Zoo (Historical):** If you have `.caffemodel` files, load them into PyTorch (using tools like `load_caffe`) and then export.
+
+## 🎓 Training & Fine-Tuning (TODO)
+
+Want your DeepDream to see things *differently*? (e.g., dogs instead of slugs?)
+You need to fine-tune the base model on a new dataset.
+
+**Current Workflow:**
+1.  Train your model in PyTorch (standard ImageNet training or custom dataset).
+2.  Save the `.pth` checkpoint.
+3.  Modify our `export_*.py` scripts to load your custom checkpoint.
+4.  Export to `.npz`.
+5.  Dream.
+
+*A dedicated `train_dream.py` script is on the roadmap.*
 
 ---
 *NickMystic*

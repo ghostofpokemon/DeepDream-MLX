@@ -175,93 +175,109 @@ def deepdream(
     return deprocess(img)
 
 
+def get_weights_path(model_name, explicit_path=None):
+    if explicit_path:
+        return explicit_path
+        
+    # 1. Try bf16 (Efficient)
+    bf16_path = f"{model_name}_mlx_bf16.npz"
+    if os.path.exists(bf16_path):
+        return bf16_path
+        
+    # 2. Try standard float32
+    fp32_path = f"{model_name}_mlx.npz"
+    if os.path.exists(fp32_path):
+        return fp32_path
+        
+    return fp32_path # Default fallback for error message
+
 def run_dream_for_model(model_name, args, img_np):
     print(f"--- Running DeepDream with {model_name} ---")
     
-    # Notebook presets
+    # ... (PRESETS dict remains here) ...
+    # Notebook presets (from notebookfc42c6db41.ipynb)
     PRESETS = {
         "nb14": {
             "layers": ["relu3_3"],
             "steps": 10,
             "lr": 0.06,
-            "octaves": 6,
-            "scale": 1.4,
+            "pyramid_size": 6,
+            "pyramid_ratio": 1.4,
             "jitter": 32,
-            "smoothing": 0.5,
+            "smoothing_coefficient": 0.5,
         },
         "nb20": {
             "layers": ["relu4_2"],
             "steps": 10,
             "lr": 0.06,
-            "octaves": 6,
-            "scale": 1.4,
+            "pyramid_size": 6,
+            "pyramid_ratio": 1.4,
             "jitter": 32,
-            "smoothing": 0.5,
+            "smoothing_coefficient": 0.5,
         },
         "nb28": {
             "layers": ["relu5_3"],
             "steps": 10,
             "lr": 0.06,
-            "octaves": 6,
-            "scale": 1.4,
+            "pyramid_size": 6,
+            "pyramid_ratio": 1.4,
             "jitter": 32,
-            "smoothing": 0.5,
+            "smoothing_coefficient": 0.5,
         },
     }
 
-    # Defaults
+    # Set up model, weights, and defaults
     current_layers = args.layers
     current_steps = args.steps
     current_lr = args.lr
-    current_octaves = args.octaves
-    current_scale = args.scale
+    current_pyramid_size = args.octaves or args.pyramid_size
+    current_pyramid_ratio = args.octave_scale or args.pyramid_ratio
     current_jitter = args.jitter
-    current_smoothing = args.smoothing
+    current_smoothing = args.smoothing_coefficient
 
-    # Model specific logic
+    # Resolve weights path
+    weights = get_weights_path(model_name, args.weights)
+
     if model_name == "vgg16":
         model = VGG16()
-        weights = args.weights or "vgg16_mlx.npz"
         default_layers = ["relu4_3"]
         if args.preset:
-            p = PRESETS[args.preset]
-            # Apply preset overrides
-            current_layers = p["layers"]
-            current_steps = p["steps"]
-            current_lr = p["lr"]
-            current_octaves = p["octaves"]
-            current_scale = p["scale"]
-            current_jitter = p["jitter"]
-            current_smoothing = p["smoothing"]
+            preset = PRESETS[args.preset]
+            current_layers = preset["layers"]
+            current_steps = preset["steps"]
+            current_lr = preset["lr"]
+            current_pyramid_size = preset["pyramid_size"]
+            current_pyramid_ratio = preset["pyramid_ratio"]
+            current_jitter = preset["jitter"]
+            current_smoothing = preset["smoothing_coefficient"]
             
     elif model_name == "vgg19":
         model = VGG19()
-        weights = args.weights or "vgg19_mlx.npz"
         default_layers = ["relu4_4"]
         if args.preset and args.preset in PRESETS:
-            p = PRESETS[args.preset]
-            current_layers = p["layers"]
-            current_steps = p["steps"]
-            current_lr = p["lr"]
-            current_octaves = p["octaves"]
-            current_scale = p["scale"]
-            current_jitter = p["jitter"]
-            current_smoothing = p["smoothing"]
+            preset = PRESETS[args.preset]
+            # Presets technically for VGG16 but we can apply them
+            current_layers = preset["layers"]
+            current_steps = preset["steps"]
+            current_lr = preset["lr"]
+            current_pyramid_size = preset["pyramid_size"]
+            current_pyramid_ratio = preset["pyramid_ratio"]
+            current_jitter = preset["jitter"]
+            current_smoothing = preset["smoothing_coefficient"]
             
     elif model_name == "resnet50":
         model = ResNet50()
-        weights = args.weights or "resnet50_mlx.npz"
         default_layers = ["layer4_2"]
         
-    else: # googlenet
+    else: # googlenet (InceptionV1)
         model = GoogLeNet()
-        weights = args.weights or "googlenet_mlx.npz"
         default_layers = ["inception3b", "inception4c", "inception4d"]
 
     if not os.path.exists(weights):
         print(f"Error: Weights NPZ not found: {weights}. Skipping {model_name}.")
         return
-
+        
+    print(f"Loading weights from: {weights}")
     model.load_npz(weights)
 
     guide_img_np = None
