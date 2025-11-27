@@ -26,28 +26,41 @@ VGG and GoogLeNet are cousins, evolving from AlexNet (2012) but taking different
 THE CONVOLUTIONAL ANCESTRY
 ==========================
 
-[ LeNet-5 (1998) ]  <-- The Grandfather (Yann LeCun) 
-       │
-       v
-[ AlexNet (2012) ]  <-- The Big Bang. The first GPU craze.
-       │
-       ├───────────────────────────────────────────────┐
-       │                                               │
-[ THE OXFORD BRANCH ]                           [ THE GOOGLE BRANCH ]
-(Philosophy: "Go Deeper")                       (Philosophy: "Go Wider")
-       │                                               │
-       │                                               │
-[ VGG (Visual Geometry Group) ]                 [ Inception (GoogLeNet) ]
-       │                                               │
-       ├─ [ VGG16 ]                                    └─ [ Inception V1 ]
-       │   │                                               │
-       │   └─ vgg16_mlx.npz (Our Port)                     ├─ bvlc_googlenet.caffemodel
-       │                                                   │  (Berkeley's Caffe Ref.)
-       └─ [ VGG19 ]                                        │
-           │                                               └─ googlenet_mlx.npz (Our Port)
-           └─ vgg19_mlx.npz (Our Port)
+┏━ LeNet-5 (1998) ━━━┓  <-- The Grandfather (Yann LeCun)
+┃          ┃          ┃
+┃          ▼          ┃
+┣━ AlexNet (2012) ━━━┫  <-- The Big Bang. The first GPU craze.
+┃          ┃          ┃
+┃          ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━┓
+┃          ┃                                                     ┃ ┃
+┃  ┏━━━━━━━┻━━━━━━━┓                              ┏━━━━━━━━━━━━━━━┻━━━━━━━┓
+┃  ┃ THE OXFORD BRANCH ┃                              ┃ THE GOOGLE BRANCH ┃
+┃  ┃ (Philosophy: "Go Deeper") ┃                      ┃ (Philosophy: "Go Wider") ┃
+┃  ┗━━━━━━━━━━━━━━━┛                              ┗━━━━━━━━━━━━━━━┛
+┃          ┃                                                     ┃
+┃          ┃                                                     ┃
+┃  ┏━━━━━━━┻━━━━━━━┓                              ┏━━━━━━━━━━━━━━━┻━━━━━━━┓
+┃  ┃ VGG (Visual Geometry Group) ┃                  ┃ Inception (GoogLeNet) ┃
+┃  ┗━━━━━━━━━━━━━━━┛                              ┗━━━━━━━━━━━━━━━┛
+┃          ┣━━━━━━━━━━━━━━━━━━━━━┳━┓                          ┃
+┃          ┃                     ┃ ┃                          ┃
+┃  ┏━━━━━━━┻━━━━━━━┓    ┏━━━━━━━┻━━━━━━━┓                      ┃
+┃  ┃    VGG16    ┃    ┃    VGG19    ┃                      ┃
+┃  ┗━━━━━━━━━━━━━━━┛    ┗━━━━━━━━━━━━━━━┛                      ┃
+┃          ┃                     ┃                              ┃
+┃          ┗━ vgg16_mlx.npz      ┗━ vgg19_mlx.npz               ┃
+┃             (Our Port)            (Our Port)                 ┃
+┃                                                              ┃
+┃  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  ┃                                                       ┃
+┃  ┗━ Inception V1 ━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┛
+┃                                  ┃
+┃                                  ┣━ bvlc_googlenet.caffemodel
+┃                                  ┃  (Berkeley's Caffe Ref.)
+┃                                  ┗━ googlenet_mlx.npz (Our Port)
+┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
-
 ## Quick Start
 
 ```bash
