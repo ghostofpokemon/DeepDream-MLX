@@ -1,12 +1,10 @@
 venv/
 __pycache__/
 *.DS_Store
-*.jpg
 *.png
 *.gif
 !assets/
 !input/
-*.jpg
-venv/
 pics/
 Agents.md
+*.jpg
