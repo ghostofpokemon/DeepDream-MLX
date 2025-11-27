@@ -1,19 +1,7 @@
-"""
-MLX DeepDream using either VGG16 (relu4_3) or GoogLeNet (Inception V1).
-
-Setup:
-- Export weights from torchvision once (in a PyTorch env):
-    python export_vgg16_npz.py
-    python export_googlenet_npz.py   # only if you want GoogLeNet
-- Ensure `mlx` is installed in this env:
-    pip install mlx
-
-Run (VGG16 default, matches deepdream.py settings):
-    python dream_mlx.py --input love.jpg --img_width 720
-"""
 
 import argparse
 import os
+import time
 from datetime import datetime
 
 import mlx.core as mx
@@ -33,10 +21,13 @@ LOWER_IMAGE_BOUND = (-IMAGENET_MEAN / IMAGENET_STD).reshape(1, 1, 1, 3)
 UPPER_IMAGE_BOUND = ((1.0 - IMAGENET_MEAN) / IMAGENET_STD).reshape(1, 1, 1, 3)
 
 
-def load_image(path, target_size):
+def load_image(path, target_width=None):
     img = Image.open(path).convert("RGB")
-    if target_size:
-        img.thumbnail((target_size, target_size), Image.LANCZOS)
+    if target_width:
+        w, h = img.size
+        scale = target_width / w
+        new_h = int(h * scale)
+        img = img.resize((target_width, new_h), Image.LANCZOS)
     return np.array(img)
 
 
@@ -66,15 +57,68 @@ def resize_bilinear(x, new_h, new_w):
     return out
 
 
-def smooth_gradients(grad, sigma):
-    """Cascade 3 Gaussian blurs (sigma multipliers 0.5/1/2) like deepdream.py."""
-    g_np = np.array(grad)
+def gaussian_kernel(sigma, truncate=4.0, fixed_radius=None):
+    """Generates a 1D Gaussian kernel."""
+    if fixed_radius is not None:
+        radius = fixed_radius
+    else:
+        # If sigma is a tracer (mx.array), this int() conversion would fail during tracing
+        # So we must use fixed_radius when compiling with dynamic sigma
+        radius = int(truncate * sigma + 0.5)
+        
+    x = mx.arange(-radius, radius + 1)
+    kernel = mx.exp(-0.5 * (x / sigma) ** 2)
+    kernel = kernel / kernel.sum()
+    return kernel
+
+
+def gaussian_blur_2d(x, sigma, fixed_radius=None):
+    """Applies Gaussian blur using separable 1D convolutions in MLX."""
+    # If sigma is 0, we should return x. But inside compiled graph with dynamic sigma, 
+    # we can't conditionally return based on value (creates graph branch). 
+    # However, gaussian with sigma close to 0 is just a delta spike.
+    # Let's relying on the kernel math: exp(-huge) -> 0. 
+    # We should add a small epsilon to sigma to avoid div by zero if sigma can be 0.
+    # But here sigma is always >= 0.5 * 0.5 = 0.25.
+    
+    # Generate kernel
+    kernel = gaussian_kernel(sigma, fixed_radius=fixed_radius)
+    kernel = kernel.astype(x.dtype)
+    k_size = kernel.shape[0]
+    
+    C = x.shape[-1]
+    
+    # Horizontal kernel: [C, 1, k, 1]
+    k_x = kernel.reshape(1, 1, k_size, 1)
+    k_x = mx.repeat(k_x, C, axis=0)
+    
+    # Vertical kernel: [C, k, 1, 1]
+    k_y = kernel.reshape(1, k_size, 1, 1)
+    k_y = mx.repeat(k_y, C, axis=0)
+    
+    pad = k_size // 2
+    
+    x = mx.conv2d(x, k_x, stride=1, padding=(0, pad), groups=C)
+    x = mx.conv2d(x, k_y, stride=1, padding=(pad, 0), groups=C)
+    
+    return x
+
+
+def smooth_gradients(grad, sigma, fixed_radius=None):
+    """Cascade 3 Gaussian blurs (sigma multipliers 0.5/1/2) using native MLX ops."""
+    # If fixed_radius is used, we must ensure it's large enough for the LARGEST sigma (sigma * 2.0).
+    # We assume the caller handled this or we just pass it through.
+    
     sigmas = [sigma * 0.5, sigma * 1.0, sigma * 2.0]
     smoothed = []
     for s in sigmas:
-        smoothed.append(nd.gaussian_filter(g_np, sigma=(0, s, s, 0), mode="reflect"))
-    g_np = sum(smoothed) / len(smoothed)
-    return mx.array(g_np, dtype=grad.dtype)
+        smoothed.append(gaussian_blur_2d(grad, s, fixed_radius=fixed_radius))
+    
+    g_total = smoothed[0]
+    for i in range(1, len(smoothed)):
+        g_total = g_total + smoothed[i]
+        
+    return g_total / len(smoothed)
 
 
 def get_pyramid_shapes(base_shape, pyramid_size, pyramid_ratio):
@@ -110,53 +154,77 @@ def deepdream(
         # Prepare guide features for this level if guide is provided
         guide_features = {}
         if guide_img_np is not None:
-            # Resize guide to current level shape
             guide_resized = resize_bilinear(preprocess(guide_img_np), nh, nw)
             _, guide_features = model.forward_with_endpoints(guide_resized)
+        
+        # Define the loss function closure
+        def loss_fn(x):
+            endpoints = model.forward_with_endpoints(x)[1]
+            loss = mx.zeros(())
+            for name in layers:
+                act = endpoints[name]
+                if guide_img_np is not None:
+                    guide_act = guide_features[name]
+                    loss = loss + mx.mean(act * guide_act)
+                else:
+                    loss = loss + mx.mean(act * act)
+            return loss / len(layers)
 
-        for it in range(steps):
-            ox, oy = np.random.randint(-jitter, jitter + 1, 2)
-            rolled = mx.roll(mx.roll(img, ox, axis=1), oy, axis=2)
+        # Calculate max radius needed for static compilation
+        # Max sigma used in loop is roughly 2.0 + smoothing_coeff (when it=steps)
+        # smooth_gradients multiplies this by 2.0 again for the largest blur.
+        # So max_effective_sigma = 2.0 * (2.0 + smoothing_coefficient)
+        max_effective_sigma = 2.0 * (2.0 + smoothing_coefficient)
+        fixed_radius = int(4.0 * max_effective_sigma + 0.5)
 
-            def loss_fn(x):
-                endpoints = model.forward_with_endpoints(x)[1]
-                loss = mx.zeros(())
-                for name in layers:
-                    act = endpoints[name]
-                    if guide_img_np is not None:
-                        # Guided: Maximize dot product (correlation) with guide features
-                        # Or Minimize L2 distance?
-                        # Classic DeepDream uses dot product effectively by setting grad = guide_act
-                        # Here we maximize sum(act * guide_act)
-                        guide_act = guide_features[name]
-                        loss = loss + mx.mean(act * guide_act)
-                    else:
-                        # Standard: Maximize L2 norm (activation strength)
-                        loss = loss + mx.mean(act * act)
-                return loss / len(layers)
-
-            loss, grads = mx.value_and_grad(loss_fn)(rolled)
-            g = smooth_gradients(
-                grads, sigma=((it + 1) / steps) * 2.0 + smoothing_coefficient
-            )
+        # Compile the update step
+        # We compile a function that takes: rolled_img, sigma (tensor)
+        # And returns: updated_rolled_img
+        @mx.compile
+        def update_step(x, sigma):
+            loss, grads = mx.value_and_grad(loss_fn)(x)
+            
+            # Pass fixed_radius to ensure kernel shapes are static
+            # while kernel values depend on dynamic 'sigma'
+            g = smooth_gradients(grads, sigma, fixed_radius=fixed_radius)
+            
+            # Normalize
             g = g - mx.mean(g)
             g = g / (mx.std(g) + 1e-8)
-            rolled = rolled + lr * g
+            
+            # Update
+            x = x + lr * g
+            
+            # Clip
+            x = mx.minimum(mx.maximum(x, LOWER_IMAGE_BOUND), UPPER_IMAGE_BOUND)
+            return x, loss
 
-            rolled = mx.minimum(
-                mx.maximum(rolled, LOWER_IMAGE_BOUND), UPPER_IMAGE_BOUND
-            )
+        for it in range(steps):
+            # Jitter (outside compiled block)
+            ox, oy = np.random.randint(-jitter, jitter + 1, 2)
+            rolled = mx.roll(mx.roll(img, ox, axis=1), oy, axis=2)
+            
+            # Calculate sigma for this step
+            sigma_val = ((it + 1) / steps) * 2.0 + smoothing_coefficient
+            
+            # Run compiled update with dynamic sigma (as tensor)
+            rolled, loss = update_step(rolled, mx.array(sigma_val))
+            
+            # Un-Jitter
             img = mx.roll(mx.roll(rolled, -ox, axis=1), -oy, axis=2)
+            
+            # Force eval to ensure computation happens (optional but good for benchmark/progress)
+            # mx.eval(img)
 
     return deprocess(img)
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="DeepDream with MLX (VGG16 or GoogLeNet)")
+    p = argparse.ArgumentParser(description="DeepDream with MLX (Compiled)")
     p.add_argument("--input", required=True, help="Input image")
     p.add_argument("--output", help="Output path")
     p.add_argument("--guide", help="Guide image for guided dreaming")
-    p.add_argument("--img_width", type=int, default=600)
+    p.add_argument("--img_width", type=int, default=None)
     p.add_argument(
         "--model",
         choices=["vgg16", "vgg19", "googlenet", "resnet50"],
@@ -166,7 +234,7 @@ def parse_args():
     p.add_argument(
         "--preset",
         choices=["nb14", "nb20", "nb28"],
-        help="Notebook-inspired presets (VGG16 only): nb14≈conv3_3, nb20≈conv4_2, nb28≈conv5_3",
+        help="Notebook-inspired presets (VGG16 only)",
     )
     p.add_argument(
         "--layers",
@@ -181,7 +249,7 @@ def parse_args():
         "--pyramid_size",
         type=int,
         default=4,
-        help="Number of pyramid levels (small->full size)",
+        help="Number of pyramid levels",
     )
     p.add_argument(
         "--pyramid_ratio",
@@ -189,11 +257,11 @@ def parse_args():
         default=1.8,
         help="Scale factor between pyramid levels",
     )
-    p.add_argument("--octaves", type=int, help="Alias for pyramid_size (legacy)")
+    p.add_argument("--octaves", type=int, help="Alias for pyramid_size")
     p.add_argument(
-        "--octave_scale", type=float, help="Alias for pyramid_ratio (legacy)"
+        "--octave_scale", type=float, help="Alias for pyramid_ratio"
     )
-    p.add_argument("--weights", help="NPZ weights path (defaults per model)")
+    p.add_argument("--weights", help="NPZ weights path")
     p.add_argument("--jitter", type=int, default=32)
     p.add_argument("--smoothing_coefficient", type=float, default=0.5)
     return p.parse_args()
@@ -201,12 +269,9 @@ def parse_args():
 
 def main():
     args = parse_args()
-    out = args.output or (
-        os.path.splitext(args.input)[0]
-        + "_dream_mlx_"
-        + datetime.now().strftime("%Y%m%d-%H%M%S")
-        + ".jpg"
-    )
+    
+    start_time = time.time()
+    start_timestamp = datetime.now()
 
     # Backward-compat aliases
     pyramid_size = args.octaves or args.pyramid_size
@@ -304,6 +369,20 @@ def main():
         smoothing_coefficient=args.smoothing_coefficient,
         guide_img_np=guide_img_np,
     )
+    
+    end_time = time.time()
+    elapsed = end_time - start_time
+    
+    if args.output:
+        out = args.output
+    else:
+        # Elegant filename: input_dream_ELAPSEDs_MMDD_HHMMSS.jpg
+        base_name = os.path.splitext(os.path.basename(args.input))[0]
+        formatted_time = f"{elapsed:.2f}s"
+        formatted_date = start_timestamp.strftime("%m%d")
+        formatted_timestamp = start_timestamp.strftime("%H%M%S")
+        out = f"{base_name}_dream_{formatted_time}_{formatted_date}_{formatted_timestamp}.jpg"
+
     Image.fromarray(dreamed).save(out)
     print(f"Saved {out}")
 

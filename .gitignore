@@ -6,3 +6,7 @@ __pycache__/
 *.gif
 !assets/
 !input/
+*.jpg
+venv/
+pics/
+Agents.md
