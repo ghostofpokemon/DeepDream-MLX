@@ -1,10 +1,14 @@
 venv/
 __pycache__/
 *.DS_Store
-*.png
-*.gif
-!assets/
-!input/
 pics/
 Agents.md
+
+# Ignore images generally
 *.jpg
+*.png
+*.gif
+
+# Un-ignore specific folders
+!assets/
+!input/
