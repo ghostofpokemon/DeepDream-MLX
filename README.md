@@ -1,92 +1,64 @@
-# DeepDream with MLX
+---
+license: mit
+tags:
+- mlx
+- computer-vision
+- art
+- generative
+pipeline_tag: image-to-image
+---
 
-A fast and efficient implementation of DeepDream using Apple's MLX framework. This implementation leverages MLX's graph compilation and native operations to deliver high-performance image generation on Apple Silicon.
+# DeepDream-MLX
 
-## Features
+Native, hardware-accelerated DeepDream for Apple Silicon.
+We ripped out the slow parts and baked the compute graph directly into the GPU.
 
-*   **Optimized for Apple Silicon:** Uses MLX for GPU-accelerated tensor operations.
-*   **Fast Execution:** significantly faster than standard PyTorch/TensorFlow implementations on Mac.
-*   **Multiple Models:** Supports VGG16 (default), VGG19, GoogLeNet, and ResNet50.
-*   **High-Res Dreaming:** Efficiently handles high-resolution images with tile-based processing (implicit in conv ops) and multi-scale pyramids.
+**Status:** Fast. 
+**Vibe:** 2015 Aesthetics // 2025 Hardware.
 
-## Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/mystic/deepdream-mlx-models.git
-    cd deepdream-mlx-models
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *Make sure you have `mlx` installed. If not, `pip install mlx`.*
-
-## Usage
-
-The main script is `dream.py`.
-
-### Basic Usage
-
-Generate a DeepDream image using the default VGG16 model:
+## Quick Start
 
 ```bash
-python dream.py --input love.jpg
+# Needs typical scientific stack + mlx
+pip install mlx numpy pillow scipy
+
+# Dream
+python dream.py --input love.jpg --model vgg16
 ```
 
-This will save the output as `love_dream_[time]...jpg`.
+## The Models
 
-### Advanced Usage
+We support the heavy hitters. Weights are converted and ready.
 
-Customize the dream parameters:
+*   **VGG16:** The Painter. Rich textures, thick brushstrokes.
+*   **GoogLeNet (InceptionV1):** The Hallucination. Eyes, animals, geometry.
+*   **ResNet50:** The Modernist. Sharp, deep structures.
+
+## Weight Conversion
+
+We didn't just wrap existing libs. We wrote custom exporters (`export_*.py`) to rip weights from standard PyTorch/Torchvision archives and serialize them into optimized MLX `.npz` arrays. 
+
+This unlocks the classic Caffe-era architectures for the Apple Unified Memory architecture. No bloat, just tensors.
+
+## Advanced
+
+Everything is tunable.
 
 ```bash
-python dream.py --input love.jpg \
-    --output dreamy_love.jpg \
+python dream.py \
+    --input assets/love.jpg \
     --model googlenet \
-    --img_width 800 \
-    --layers inception4c \
     --steps 20 \
-    --pyramid_size 6 \
-    --jitter 32
+    --jitter 32 \
+    --pyramid_size 6
 ```
 
-### Arguments
+## File Structure
 
-*   `--input`: Path to the input image (required).
-*   `--output`: Path to save the output image (optional, auto-generated if omitted).
-*   `--model`: Model architecture to use: `vgg16` (default), `vgg19`, `googlenet`, `resnet50`.
-*   `--img_width`: Resize input image to this width (maintains aspect ratio). Default: uses original size.
-*   `--layers`: Specific layers to maximize activations for.
-*   `--steps`: Number of gradient ascent steps per pyramid scale (default: 10).
-*   `--lr`: Learning rate (step size) (default: 0.09).
-*   `--pyramid_size`: Number of scales in the image pyramid (default: 4).
-*   `--pyramid_ratio`: Scale factor between pyramid levels (default: 1.8).
-*   `--jitter`: Amount of random image shift (jitter) to apply (default: 32).
+*   `dream.py`: The engine. Compiled graph execution.
+*   `mlx_*.py`: Model definitions ported to native MLX.
+*   `*.npz`: The weights (ported by us).
+*   `export_*.py`: The bridge scripts that brought these models here.
 
-## Examples
-
-### 1. VGG16 "Artistic" Style
-*Using the default VGG16 model, known for its rich, painterly textures.*
-
-```bash
-python dream.py --input love.jpg --model vgg16 --img_width 600 --output assets/example_vgg16.jpg
-```
-
-![VGG16 Example](assets/example_vgg16.jpg)
-
-### 2. GoogLeNet "Classic" Style
-*Using GoogLeNet (InceptionV1), the classic DeepDream model known for eyes and animals.*
-
-```bash
-python dream.py --input love.jpg --model googlenet --img_width 600 --output assets/example_googlenet.jpg
-```
-
-![GoogLeNet Example](assets/example_googlenet.jpg)
-
-## Acknowledgments
-
-*   Original DeepDream implementation by Google.
-*   Apple MLX team for the framework.
-*   This implementation includes optimized Gaussian smoothing and compiled update steps for maximum performance.
+---
+*NickMystic*
