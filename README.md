@@ -1,4 +1,4 @@
----
+--- 
 license: apache-2.0
 tags:
 - mlx
@@ -18,16 +18,14 @@ pipeline_tag: image-to-image
 
 ## ⚡️ Instant Gratification
 
-Don't think. Just dream.
-
 ```bash
-# 1. Install
+# 1. Install Dependencies
 pip install mlx numpy pillow scipy
 
-# 2. Run (VGG16 Default)
+# 2. Dream (VGG16 Default)
 python dream.py --input love.jpg
 
-# 3. Run (All Models)
+# 3. Dream (All Models)
 python dream.py --input love.jpg --model all
 ```
 
@@ -71,17 +69,17 @@ vgg16_mlx.npz    vgg19_mlx.npz                      googlenet_mlx.npz
 
 ## 🧠 The Models
 
-*   **VGG16:** *The Painter.* Rich textures, thick brushstrokes.
-*   **GoogLeNet:** *The Hallucination.* Eyes, animals, geometry. The classic.
-*   **VGG19:** *The Stylist.* Complex, layered patterns.
-*   **ResNet50:** *The Modernist.* Sharp, deep structures.
+*   **VGG16:** General purpose image features.
+*   **GoogLeNet (InceptionV1):** The classic DeepDream model.
+*   **VGG19:** Deeper VGG features.
+*   **ResNet50:** Modern deep features.
 
 ## 🧪 Recipes
 
 Copy-paste these to get the exact looks from the header.
 
-### 1. The Classic Trip (GoogLeNet)
-*Multi-scale hallucination targeting `inception3a`, `4e`, and `5b`.*
+### 1. Classic Inception Patterns (GoogLeNet)
+*This setup targets various Inception layers for recognizable DeepDream shapes.*
 
 ```bash
 python dream.py --input love.jpg \
@@ -95,8 +93,8 @@ python dream.py --input love.jpg \
     --layers inception3a inception4e inception5b
 ```
 
-### 2. The Deep Texture (VGG16)
-*Rich artistic textures targeting `relu4_2`.*
+### 2. Rich Textures (VGG16)
+*A VGG16 run for detailed, painterly results.*
 
 ```bash
 python dream.py --input love.jpg \
@@ -110,8 +108,8 @@ python dream.py --input love.jpg \
     --layers relu4_2
 ```
 
-### 3. The Quick Study (VGG19)
-*Aggressive, shallow run on `relu5_2`.*
+### 3. Layered Patterns (VGG19)
+*A VGG19 run for complex, stylized outputs.*
 
 ```bash
 python dream.py --input love.jpg \
@@ -125,11 +123,39 @@ python dream.py --input love.jpg \
     --layers relu5_2
 ```
 
+### 4. Different VGG16 Vision
+*Another VGG16 setting, exploring alternative features.*
+
+```bash
+python dream.py --input love.jpg \
+    --model vgg16 \
+    --steps 24 \
+    --lr 0.069 \
+    --octaves 4 \
+    --scale 1.8 \
+    --jitter 10 \
+    --smoothing 0.41 \
+    --layers relu5_1
+```
+
+### 5. Sharp Abstract Forms (ResNet50)
+*Modern features from ResNet50 for distinct, edgy results.*
+
+```bash
+python dream.py --input love.jpg \
+    --model resnet50 \
+    --steps 22 \
+    --lr 0.13 \
+    --octaves 4 \
+    --scale 2 \
+    --jitter 83 \
+    --smoothing 0.47 \
+    --layers layer3_2 layer3_5
+```
+
 ## 💾 Weight Conversion
 
-We didn't just wrap existing libs. We wrote custom exporters (`export_*.py`) to rip weights from standard PyTorch/Torchvision archives and serialize them into optimized MLX `.npz` arrays.
-
-This unlocks the classic Caffe-era architectures for the Apple Unified Memory architecture. No bloat, just tensors.
+We took 10-year-old model weights from PyTorch/Torchvision (often based on original Caffe implementations) and converted them directly into optimized MLX `.npz` arrays. Our custom `export_*.py` scripts handle this. This brings these classic architectures to **Apple Silicon**, clean and efficient.
 
 ---
-*NickMystic*
+*NickMystic
