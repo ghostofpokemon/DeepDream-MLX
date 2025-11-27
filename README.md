@@ -1,44 +1,75 @@
---model vgg16
+--- license: mit
+tags:
+- mlx
+- computer-vision
+- art
+- generative
+pipeline_tag: image-to-image
+---
 
-# Dream with ALL models
-python dream.py --input love.jpg --model all
+# DeepDream-MLX
+
+Native, hardware-accelerated DeepDream for Apple Silicon.
+We ripped out the slow parts and baked the compute graph directly into the GPU.
+
+**Status:** Fast. 
+**Vibe:** 2015 Aesthetics // 2025 Hardware.
+
+![DeepDream Header](assets/deepdream_header.jpg)
+
+## The Lineage
+
+VGG and GoogLeNet are cousins, evolving from AlexNet (2012) but taking different paths: one went **Deep**, the other went **Wide**.
+
+```text
+THE CONVOLUTIONAL ANCESTRY
+==========================
+
+[ LeNet-5 (1998) ]  <-- The Grandfather (Yann LeCun)
+       \
+       v
+[ AlexNet (2012) ]  <-- The Big Bang. The first GPU craze.
+       \
+       ├───────────────────────────────────────────────┐
+       │                                               │
+[ THE OXFORD BRANCH ]                           [ THE GOOGLE BRANCH ]
+(Philosophy: "Go Deeper")                       (Philosophy: "Go Wider")
+       │                                               │
+       │                                               │
+[ VGG (Visual Geometry Group) ]                 [ Inception (GoogLeNet) ]
+       │                                               │
+       ├─ [ VGG16 ]                                    └─ [ Inception V1 ]
+       │   │                                               │
+       │   └─ vgg16_mlx.npz (Our Port)                     ├─ bvlc_googlenet.caffemodel
+       │                                                   │  (Berkeley's Caffe Ref.)
+       └─ [ VGG19 ]                                        │
+           │                                               └─ googlenet_mlx.npz (Our Port)
+           └─ vgg19_mlx.npz (Our Port)
+```
+
+## Quick Start
+
+```bash
+# Needs typical scientific stack + mlx
+pip install mlx numpy pillow scipy
+
+# Dream with default VGG16
+python dream.py --input love.jpg
 ```
 
 ## The Models
 
-We support the heavy hitters. Weights are converted and ready.
-
 *   **VGG16:** The Painter. Rich textures, thick brushstrokes.
-*   **GoogLeNet (InceptionV1):** The Hallucination. Eyes, animals, geometry. The classic DeepDream model.
+*   **GoogLeNet (InceptionV1):** The Hallucination. Eyes, animals, geometry.
 *   **VGG19:** The Stylist. Complex, layered patterns.
 *   **ResNet50:** The Modernist. Sharp, deep structures.
 
-## Weight Conversion
+## Recipes
 
-We didn't just wrap existing libs. We wrote custom exporters (`export_*.py`) to rip weights from standard PyTorch/Torchvision archives and serialize them into optimized MLX `.npz` arrays. 
+Here are the exact commands used to generate the header images:
 
-This unlocks the classic Caffe-era architectures for the Apple Unified Memory architecture. No bloat, just tensors.
-
-## Examples
-
-### 1. VGG16: The Deep Texture
-*Targeting `relu4_2` for rich, painterly artifacts.*
-
-```bash
-python dream.py --input love.jpg \
-    --model vgg16 \
-    --steps 24 \
-    --lr 0.07 \
-    --pyramid_size 4 \
-    --pyramid_ratio 1.8 \
-    --jitter 36 \
-    --smoothing_coefficient 0.19 \
-    --layers relu4_2
-```
-![VGG16](love_dream_53.31s_1127_035917.jpg)
-
-### 2. GoogLeNet: The Multi-Scale Trip
-*Hitting `inception3a`, `4e`, and `5b` simultaneously.*
+### 1. GoogLeNet (The Classic)
+*Multi-scale hallucination targeting `inception3a`, `4e`, and `5b`.*
 
 ```bash
 python dream.py --input love.jpg \
@@ -51,10 +82,24 @@ python dream.py --input love.jpg \
     --smoothing_coefficient 0.08 \
     --layers inception3a inception4e inception5b
 ```
-![GoogLeNet](love_dream_37.01s_1127_040011.jpg)
 
-### 3. VGG19: The Quick Study
-*A shallower, aggressive run on `relu5_2`.*
+### 2. VGG16 (The Painter)
+*Rich artistic textures targeting `relu4_2`.*
+
+```bash
+python dream.py --input love.jpg \
+    --model vgg16 \
+    --steps 24 \
+    --lr 0.07 \
+    --pyramid_size 4 \
+    --pyramid_ratio 1.8 \
+    --jitter 36 \
+    --smoothing_coefficient 0.19 \
+    --layers relu4_2
+```
+
+### 3. VGG19 (The Stylist)
+*Aggressive, shallow run on `relu5_2`.*
 
 ```bash
 python dream.py --input love.jpg \
@@ -67,14 +112,12 @@ python dream.py --input love.jpg \
     --smoothing_coefficient 0.41 \
     --layers relu5_2
 ```
-![VGG19](love_dream_53.20s_1127_040048.jpg)
 
-## File Structure
+## Weight Conversion
 
-*   `dream.py`: The engine. Compiled graph execution. Supports `model='all'` to run the full suite.
-*   `mlx_*.py`: Model definitions ported to native MLX.
-*   `*.npz`: The weights (ported by us).
-*   `export_*.py`: The bridge scripts that brought these models here.
+We didn't just wrap existing libs. We wrote custom exporters (`export_*.py`) to rip weights from standard PyTorch/Torchvision archives and serialize them into optimized MLX `.npz` arrays. 
+
+This unlocks the classic Caffe-era architectures for the Apple Unified Memory architecture. No bloat, just tensors.
 
 ---
 *NickMystic*
