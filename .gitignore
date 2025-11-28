@@ -23,6 +23,7 @@ toConvert/*
 
 # Un-ignore specific assets
 !assets/
+!assets/**
 !input/
 toConvert/
 comparisons/
