@@ -178,63 +178,20 @@ def deepdream(
 
 
 def get_weights_path(model_name, explicit_path=None):
-
-
     if explicit_path:
-
-
         return explicit_path
 
+    # 1. Try standard MLX export (float16/bf16 default)
+    path = f"{model_name}_mlx.npz"
+    if os.path.exists(path):
+        return path
 
-        
-
-
-    # 1. Try int8 (Maximum Efficiency / Smallest)
-
-
-    int8_path = f"{model_name}_mlx_int8.npz"
-
-
-    if os.path.exists(int8_path):
-
-
-        return int8_path
-
-
-
-
-
-    # 2. Try bf16 (Standard Efficient)
-
-
+    # 2. Try explicit bf16 suffix (legacy)
     bf16_path = f"{model_name}_mlx_bf16.npz"
-
-
     if os.path.exists(bf16_path):
-
-
         return bf16_path
-
-
         
-
-
-    # 3. Try standard float32
-
-
-    fp32_path = f"{model_name}_mlx.npz"
-
-
-    if os.path.exists(fp32_path):
-
-
-        return fp32_path
-
-
-        
-
-
-    return int8_path # Return preferred default for error message context
+    return path # Return default for error message context
 
 
 def run_dream_for_model(model_name, args, img_np):

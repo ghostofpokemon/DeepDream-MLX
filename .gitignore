@@ -2,15 +2,27 @@ venv/
 __pycache__/
 *.DS_Store
 pics/
-Agents.md
-toConvert/
-caffe/
+borrowFrom/
+benchmark_results/
+
+# Large Model Files (Source)
+*.pth
+*.tar
+*.t7
+*.caffemodel
+*.ckpt
+
+# Ignore contents of toConvert but keep the folder
+toConvert/*
+!toConvert/.gitkeep
 
 # Ignore images generally
 *.jpg
 *.png
 *.gif
 
-# Un-ignore specific folders
+# Un-ignore specific assets
 !assets/
 !input/
+toConvert/
+comparisons/
