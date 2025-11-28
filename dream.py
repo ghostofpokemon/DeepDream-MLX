@@ -7,10 +7,10 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
 import scipy.ndimage as nd
-from mlx_resnet50 import ResNet50
 from PIL import Image
 
 from mlx_googlenet import GoogLeNet
+from mlx_resnet50 import ResNet50
 from mlx_vgg16 import VGG16
 from mlx_vgg19 import VGG19
 
@@ -62,7 +62,7 @@ def gaussian_kernel(sigma, truncate=4.0, fixed_radius=None):
         radius = fixed_radius
     else:
         radius = int(truncate * sigma + 0.5)
-        
+
     x = mx.arange(-radius, radius + 1)
     kernel = mx.exp(-0.5 * (x / sigma) ** 2)
     kernel = kernel / kernel.sum()
@@ -75,14 +75,14 @@ def gaussian_blur_2d(x, sigma, fixed_radius=None):
     kernel = kernel.astype(x.dtype)
     k_size = kernel.shape[0]
     C = x.shape[-1]
-    
+
     k_x = kernel.reshape(1, 1, k_size, 1)
     k_x = mx.repeat(k_x, C, axis=0)
     k_y = kernel.reshape(1, k_size, 1, 1)
     k_y = mx.repeat(k_y, C, axis=0)
-    
+
     pad = k_size // 2
-    
+
     x = mx.conv2d(x, k_x, stride=1, padding=(0, pad), groups=C)
     x = mx.conv2d(x, k_y, stride=1, padding=(pad, 0), groups=C)
     return x
@@ -94,7 +94,7 @@ def smooth_gradients(grad, sigma, fixed_radius=None):
     smoothed = []
     for s in sigmas:
         smoothed.append(gaussian_blur_2d(grad, s, fixed_radius=fixed_radius))
-    
+
     g_total = smoothed[0]
     for i in range(1, len(smoothed)):
         g_total = g_total + smoothed[i]
@@ -135,7 +135,7 @@ def deepdream(
         if guide_img_np is not None:
             guide_resized = resize_bilinear(preprocess(guide_img_np), nh, nw)
             _, guide_features = model.forward_with_endpoints(guide_resized)
-        
+
         def loss_fn(x):
             endpoints = model.forward_with_endpoints(x)[1]
             loss = mx.zeros(())
@@ -165,64 +165,108 @@ def deepdream(
         for it in range(steps):
             ox, oy = np.random.randint(-jitter, jitter + 1, 2)
             rolled = mx.roll(mx.roll(img, ox, axis=1), oy, axis=2)
-            
+
             sigma_val = ((it + 1) / steps) * 2.0 + smoothing
-            
+
             rolled, loss = update_step(rolled, mx.array(sigma_val))
-            
+
             img = mx.roll(mx.roll(rolled, -ox, axis=1), -oy, axis=2)
-            
+
     return deprocess(img)
 
 
 def get_weights_path(model_name, explicit_path=None):
+
+
     if explicit_path:
+
+
         return explicit_path
+
+
         
-    # 1. Try bf16 (Efficient)
+
+
+    # 1. Try int8 (Maximum Efficiency / Smallest)
+
+
+    int8_path = f"{model_name}_mlx_int8.npz"
+
+
+    if os.path.exists(int8_path):
+
+
+        return int8_path
+
+
+
+
+
+    # 2. Try bf16 (Standard Efficient)
+
+
     bf16_path = f"{model_name}_mlx_bf16.npz"
+
+
     if os.path.exists(bf16_path):
+
+
         return bf16_path
+
+
         
-    # 2. Try standard float32
+
+
+    # 3. Try standard float32
+
+
     fp32_path = f"{model_name}_mlx.npz"
+
+
     if os.path.exists(fp32_path):
+
+
         return fp32_path
+
+
         
-    return fp32_path # Default fallback for error message
+
+
+    return int8_path # Return preferred default for error message context
+
 
 def run_dream_for_model(model_name, args, img_np):
     print(f"--- Running DeepDream with {model_name} ---")
-    
+
     # ... (PRESETS dict remains here) ...
-    # Notebook presets (from notebookfc42c6db41.ipynb)
+    # Notebook presets
     PRESETS = {
         "nb14": {
             "layers": ["relu3_3"],
             "steps": 10,
             "lr": 0.06,
-            "pyramid_size": 6,
-            "pyramid_ratio": 1.4,
+            "octaves": 6,
+            "scale": 1.4,
             "jitter": 32,
-            "smoothing_coefficient": 0.5,
+            "smoothing": 0.5,
         },
         "nb20": {
             "layers": ["relu4_2"],
             "steps": 10,
             "lr": 0.06,
-            "pyramid_size": 6,
-            "pyramid_ratio": 1.4,
+            "octaves": 6,
+            "scale": 1.4,
             "jitter": 32,
-            "smoothing_coefficient": 0.5,
+            "smoothing": 0.5,
         },
         "nb28": {
             "layers": ["relu5_3"],
             "steps": 10,
             "lr": 0.06,
-            "pyramid_size": 6,
-            "pyramid_ratio": 1.4,
+            "octaves": 6,
+            "scale": 1.4,
             "jitter": 32,
-            "smoothing_coefficient": 0.5,
+            "smoothing": 0.5,
         },
     }
 
@@ -230,53 +274,54 @@ def run_dream_for_model(model_name, args, img_np):
     current_layers = args.layers
     current_steps = args.steps
     current_lr = args.lr
-    current_pyramid_size = args.octaves or args.pyramid_size
-    current_pyramid_ratio = args.octave_scale or args.pyramid_ratio
+    current_octaves = args.octaves
+    current_scale = args.scale
     current_jitter = args.jitter
-    current_smoothing = args.smoothing_coefficient
-
-    # Resolve weights path
-    weights = get_weights_path(model_name, args.weights)
+    current_smoothing = args.smoothing
 
     if model_name == "vgg16":
         model = VGG16()
+        weights = get_weights_path("vgg16", args.weights)
         default_layers = ["relu4_3"]
         if args.preset:
-            preset = PRESETS[args.preset]
-            current_layers = preset["layers"]
-            current_steps = preset["steps"]
-            current_lr = preset["lr"]
-            current_pyramid_size = preset["pyramid_size"]
-            current_pyramid_ratio = preset["pyramid_ratio"]
-            current_jitter = preset["jitter"]
-            current_smoothing = preset["smoothing_coefficient"]
-            
+            p = PRESETS[args.preset]
+            # Apply preset overrides
+            current_layers = p["layers"]
+            current_steps = p["steps"]
+            current_lr = p["lr"]
+            current_octaves = p["octaves"]
+            current_scale = p["scale"]
+            current_jitter = p["jitter"]
+            current_smoothing = p["smoothing"]
+
     elif model_name == "vgg19":
         model = VGG19()
+        weights = get_weights_path("vgg19", args.weights)
         default_layers = ["relu4_4"]
         if args.preset and args.preset in PRESETS:
-            preset = PRESETS[args.preset]
-            # Presets technically for VGG16 but we can apply them
-            current_layers = preset["layers"]
-            current_steps = preset["steps"]
-            current_lr = preset["lr"]
-            current_pyramid_size = preset["pyramid_size"]
-            current_pyramid_ratio = preset["pyramid_ratio"]
-            current_jitter = preset["jitter"]
-            current_smoothing = preset["smoothing_coefficient"]
-            
+            p = PRESETS[args.preset]
+            current_layers = p["layers"]
+            current_steps = p["steps"]
+            current_lr = p["lr"]
+            current_octaves = p["octaves"]
+            current_scale = p["scale"]
+            current_jitter = p["jitter"]
+            current_smoothing = p["smoothing"]
+
     elif model_name == "resnet50":
         model = ResNet50()
+        weights = get_weights_path("resnet50", args.weights)
         default_layers = ["layer4_2"]
-        
-    else: # googlenet (InceptionV1)
+
+    else:  # googlenet
         model = GoogLeNet()
+        weights = get_weights_path("googlenet", args.weights)
         default_layers = ["inception3b", "inception4c", "inception4d"]
 
     if not os.path.exists(weights):
         print(f"Error: Weights NPZ not found: {weights}. Skipping {model_name}.")
         return
-        
+
     print(f"Loading weights from: {weights}")
     model.load_npz(weights)
 
@@ -300,10 +345,10 @@ def run_dream_for_model(model_name, args, img_np):
         smoothing=current_smoothing,
         guide_img_np=guide_img_np,
     )
-    
+
     end_time = time.time()
     elapsed = end_time - start_time
-    
+
     if args.output:
         out = args.output
     else:
@@ -322,10 +367,17 @@ def parse_args():
     p.add_argument("--input", required=True, help="Input image path")
     p.add_argument("--output", help="Output image path (optional)")
     p.add_argument("--guide", help="Guide image for guided dreaming")
-    
-    p.add_argument("--width", type=int, default=None, help="Resize input to width (maintains aspect ratio)")
-    p.add_argument("--img_width", type=int, help="Alias for --width", dest="width") # Alias
-    
+
+    p.add_argument(
+        "--width",
+        type=int,
+        default=None,
+        help="Resize input to width (maintains aspect ratio)",
+    )
+    p.add_argument(
+        "--img_width", type=int, help="Alias for --width", dest="width"
+    )  # Alias
+
     p.add_argument(
         "--model",
         choices=["vgg16", "vgg19", "googlenet", "resnet50", "all"],
@@ -333,25 +385,40 @@ def parse_args():
         help="Model to use. 'all' runs all models.",
     )
     p.add_argument("--preset", choices=["nb14", "nb20", "nb28"], help="VGG16 presets")
-    
+
     p.add_argument("--layers", nargs="+", help="Layers to maximize")
-    p.add_argument("--steps", type=int, default=10, help="Gradient ascent steps per octave")
+    p.add_argument(
+        "--steps", type=int, default=10, help="Gradient ascent steps per octave"
+    )
     p.add_argument("--lr", type=float, default=0.09, help="Learning rate (step size)")
-    
+
     p.add_argument("--octaves", type=int, default=4, help="Number of image octaves")
-    p.add_argument("--pyramid_size", type=int, dest="octaves", help="Alias for --octaves") # Alias
-    
+    p.add_argument(
+        "--pyramid_size", type=int, dest="octaves", help="Alias for --octaves"
+    )  # Alias
+
     p.add_argument("--scale", type=float, default=1.8, help="Octave scale factor")
-    p.add_argument("--pyramid_ratio", type=float, dest="scale", help="Alias for --scale") # Alias
-    p.add_argument("--octave_scale", type=float, dest="scale", help="Alias for --scale") # Alias
-    
+    p.add_argument(
+        "--pyramid_ratio", type=float, dest="scale", help="Alias for --scale"
+    )  # Alias
+    p.add_argument(
+        "--octave_scale", type=float, dest="scale", help="Alias for --scale"
+    )  # Alias
+
     p.add_argument("--jitter", type=int, default=32, help="Jitter amount (pixels)")
-    
-    p.add_argument("--smoothing", type=float, default=0.5, help="Gradient smoothing strength")
-    p.add_argument("--smoothing_coefficient", type=float, dest="smoothing", help="Alias for --smoothing") # Alias
-    
+
+    p.add_argument(
+        "--smoothing", type=float, default=0.5, help="Gradient smoothing strength"
+    )
+    p.add_argument(
+        "--smoothing_coefficient",
+        type=float,
+        dest="smoothing",
+        help="Alias for --smoothing",
+    )  # Alias
+
     p.add_argument("--weights", help="Custom weights path")
-    
+
     return p.parse_args()
 
 
@@ -359,11 +426,13 @@ def main():
     args = parse_args()
     img_np = load_image(args.input, args.width)
 
-    if args.model == 'all':
+    if args.model == "all":
         models = ["vgg16", "vgg19", "googlenet", "resnet50"]
         if args.output:
-            print("Warning: --output argument ignored because --model='all' was selected.")
-            args.output = None 
+            print(
+                "Warning: --output argument ignored because --model='all' was selected."
+            )
+            args.output = None
         for m in models:
             run_dream_for_model(m, args, img_np)
     else:

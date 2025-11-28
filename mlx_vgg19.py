@@ -92,13 +92,25 @@ class VGG19(nn.Module):
     def load_npz(self, path: str):
         data = np.load(path)
 
-        def to_mlx_weight(w):
-            return np.transpose(w, (0, 2, 3, 1)) if w.ndim == 4 else w
+        def load_weight(key, transpose=False):
+            if key in data:
+                w = data[key]
+            elif f"{key}_int8" in data:
+                w_int8 = data[f"{key}_int8"]
+                scale = data[f"{key}_scale"]
+                w = w_int8.astype(scale.dtype) * scale
+            else:
+                raise ValueError(f"Missing key {key} in npz")
+            
+            if transpose and w.ndim == 4:
+                w = np.transpose(w, (0, 2, 3, 1))
+            return mx.array(w)
 
         conv_indices = [0, 2, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25, 28, 30, 32, 34]
         for idx in conv_indices:
             conv = self.layers[idx]
             weight_key = f"features.{idx}.weight"
             bias_key = f"features.{idx}.bias"
-            conv.weight = mx.array(to_mlx_weight(data[weight_key]))
-            conv.bias = mx.array(data[bias_key])
+            
+            conv.weight = load_weight(weight_key, transpose=True)
+            conv.bias = load_weight(bias_key)

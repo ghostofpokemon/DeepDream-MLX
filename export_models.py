@@ -37,23 +37,37 @@ def export_model(model_name, dtype="float32"):
     
     target_type = np.float32
     suffix = ""
+    quantize_int8 = False
     
     if dtype in ["float16", "bf16", "half"]:
         target_type = np.float16
         suffix = "_bf16" # Keep legacy suffix for compatibility with dream.py logic
+    elif dtype == "int8":
+        target_type = np.float16 # Base type for scales/biases
+        suffix = "_int8"
+        quantize_int8 = True
     
     for k, v in state.items():
         v_np = v.cpu().detach().numpy()
         
-        # ResNet specific: Transpose conv weights if needed?
-        # MLX ResNet implementation usually handles transposition in load_weights or expects PyTorch layout?
-        # Our mlx_resnet50.py has `to_mlx_weight` which does transpose (0, 2, 3, 1).
-        # VGG MLX implementation also does transpose.
-        # However, our previous export scripts (e.g. export_vgg16_npz.py) just saved state_dict AS IS.
-        # And `mlx_*.py` `load_npz` handled the transposition.
-        # So we just save the numpy array as is.
-        
-        converted_state[k] = v_np.astype(target_type)
+        if quantize_int8 and "weight" in k and v_np.ndim >= 2:
+            # Quantize to INT8
+            v_abs = np.abs(v_np)
+            v_max = np.max(v_abs)
+            
+            # Scale to range [-127, 127]
+            # Avoid div by zero
+            if v_max == 0:
+                scale = 1.0
+            else:
+                scale = v_max / 127.0
+            
+            v_int8 = (v_np / scale).astype(np.int8)
+            
+            converted_state[f"{k}_int8"] = v_int8
+            converted_state[f"{k}_scale"] = np.array(scale).astype(target_type)
+        else:
+            converted_state[k] = v_np.astype(target_type)
 
     out_name = f"{model_name}_mlx{suffix}.npz"
     np.savez(out_name, **converted_state)
@@ -67,7 +81,7 @@ def export_model(model_name, dtype="float32"):
 def main():
     parser = argparse.ArgumentParser(description="Export PyTorch models to MLX")
     parser.add_argument("--model", choices=["vgg16", "vgg19", "googlenet", "resnet50", "all"], default="all")
-    parser.add_argument("--dtype", choices=["float32", "float16", "bf16"], default="float16", help="Output data type")
+    parser.add_argument("--dtype", choices=["float32", "float16", "bf16", "int8"], default="float16", help="Output data type")
     args = parser.parse_args()
     
     models_to_export = ["vgg16", "vgg19", "googlenet", "resnet50"] if args.model == "all" else [args.model]

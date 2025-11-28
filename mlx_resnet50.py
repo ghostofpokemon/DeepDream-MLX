@@ -114,17 +114,28 @@ class ResNet(nn.Module):
     def load_npz(self, path: str):
         data = np.load(path)
 
-        def to_mlx_weight(w):
-            return np.transpose(w, (0, 2, 3, 1)) if w.ndim == 4 else w
+        def load_weight(key, transpose=False):
+            if key in data:
+                w = data[key]
+            elif f"{key}_int8" in data:
+                w_int8 = data[f"{key}_int8"]
+                scale = data[f"{key}_scale"]
+                w = w_int8.astype(scale.dtype) * scale
+            else:
+                raise ValueError(f"Missing key {key} in npz")
+            
+            if transpose and w.ndim == 4:
+                w = np.transpose(w, (0, 2, 3, 1))
+            return mx.array(w)
 
         def load_bn(prefix, bn):
-            bn.weight = mx.array(data[f"{prefix}.weight"])
-            bn.bias = mx.array(data[f"{prefix}.bias"])
-            bn.running_mean = mx.array(data[f"{prefix}.running_mean"])
-            bn.running_var = mx.array(data[f"{prefix}.running_var"])
+            bn.weight = load_weight(f"{prefix}.weight")
+            bn.bias = load_weight(f"{prefix}.bias")
+            bn.running_mean = load_weight(f"{prefix}.running_mean")
+            bn.running_var = load_weight(f"{prefix}.running_var")
 
         def load_conv(prefix, conv):
-            conv.weight = mx.array(to_mlx_weight(data[f"{prefix}.weight"]))
+            conv.weight = load_weight(f"{prefix}.weight", transpose=True)
         
         # Initial layers
         load_conv("conv1", self.conv1)

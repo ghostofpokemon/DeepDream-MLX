@@ -110,19 +110,36 @@ class GoogLeNet(nn.Module):
     def load_npz(self, path: str):
         data = np.load(path)
 
-        def to_mlx_weight(w):
-            # PyTorch Conv2d weights are (out_channels, in_channels, kH, kW)
-            # MLX expects channel-last filters: (out_channels, kH, kW, in_channels)
-            return np.transpose(w, (0, 2, 3, 1)) if w.ndim == 4 else w
+        def load_weight(key, target_module, param_name="weight", transpose=False):
+            # Check for standard float16/32 key
+            if key in data:
+                w = data[key]
+            # Check for int8 quantized key
+            elif f"{key}_int8" in data:
+                w_int8 = data[f"{key}_int8"]
+                scale = data[f"{key}_scale"]
+                # Dequantize
+                w = w_int8.astype(scale.dtype) * scale
+            else:
+                raise ValueError(f"Missing key {key} (or {key}_int8) in npz")
+
+            # Transpose for Conv2d weights if needed (PyTorch [O,I,H,W] -> MLX [O,H,W,I])
+            if transpose and w.ndim == 4:
+                w = np.transpose(w, (0, 2, 3, 1))
+            
+            # Assign to module
+            target_module[param_name] = mx.array(w)
 
         def load_conv_bn(prefix, seq_mod: nn.Sequential):
             conv = seq_mod.layers[0]
             bn = seq_mod.layers[1]
-            conv.weight = mx.array(to_mlx_weight(data[f"{prefix}.conv.weight"]))
-            bn.weight = mx.array(data[f"{prefix}.bn.weight"])
-            bn.bias = mx.array(data[f"{prefix}.bn.bias"])
-            bn.running_mean = mx.array(data[f"{prefix}.bn.running_mean"])
-            bn.running_var = mx.array(data[f"{prefix}.bn.running_var"])
+            
+            load_weight(f"{prefix}.conv.weight", conv, transpose=True)
+            
+            load_weight(f"{prefix}.bn.weight", bn)
+            load_weight(f"{prefix}.bn.bias", bn, param_name="bias")
+            load_weight(f"{prefix}.bn.running_mean", bn, param_name="running_mean")
+            load_weight(f"{prefix}.bn.running_var", bn, param_name="running_var")
 
         load_conv_bn("conv1", self.conv1)
         load_conv_bn("conv2", self.conv2)
