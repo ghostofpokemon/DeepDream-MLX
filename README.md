@@ -17,97 +17,101 @@ pipeline_tag: image-to-image
 
 <img src="assets/deepdream_header.jpg" alt="DeepDream Header" width="100%"/>
 
-**Status:** Fast. Native. 
-**Vibe:** 2015 Hallucinations // 2025 Silicon.
+**Status:** Fast + native. **Vibe:** 2015 hallucinations, 2025 silicon.
 
-DeepDream-MLX brings the classic psychedelic computer vision algorithm to modern Apple Silicon, running natively on the GPU via the [MLX](https://github.com/ml-explore/mlx) framework. No Caffe, no slow conversion layers—just pure tensor operations.
+DeepDream-MLX brings the original psychedelic computer vision look to Apple Silicon using [MLX](https://github.com/ml-explore/mlx). No Caffe relics—just clean tensor ops, ready-to-go checkpoints, and a zoom-video pipeline.
 
-## ⚡️ Quick Start
+## What You Get
+
+- MLX checkpoints for GoogLeNet (Inception v1), VGG16/VGG19, ResNet50, AlexNet, plus Places365 + bf16 variants (all `.npz`, tracked with LFS).
+- `dream.py`: full DeepDream CLI with presets (`--preset nb14/nb20/nb28`), guided dreaming (`--guide`), and `--model all` for side-by-side runs.
+- `dream_video.py`: zoom feedback loop using `scipy.ndimage.zoom`, outputs frames for `ffmpeg`.
+- `convert.py`: scan or download `.pth`/`.t7` checkpoints and convert them into MLX format while keeping `toConvert/` clean.
+- `benchmark.py` + `quantize_experiment.py`: quick speed checks and quantization experiments on Apple GPUs.
+
+## Install
 
 ```bash
-# 1. Install
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-
-# 2. Dream (Default VGG16)
-python dream.py --input assets/demo_googlenet.jpg
-
-# 3. Explore Models
-python dream.py --input assets/demo_googlenet.jpg --model googlenet --layers inception4c
 ```
 
-## 🔮 The Evolution of Vision
-
-We support the classic ancestors of modern Computer Vision.
-
-```text
-   TIMELINE       MODEL            PARAMS      PHILOSOPHY
-   ──────────────────────────────────────────────────────────
-   1998           LeNet-5          60K         "Digits."
-     │
-     ▼
-   2012           AlexNet          60M         "Deep."
-     │            (Available)
-     │
-     ├────────────┐
-     ▼            ▼
-   2014         2014
-   VGG16        GoogLeNet          7M          "Wide & Efficient."
-   138M         (Inception)
-   "Deeper."
-     │
-     ▼
-   2015
-   ResNet50       25M              "Identity & Residuals."
-   (Modern Standard)
-```
-
-## 🧪 Recipes
-
-### 1. The Classic (GoogLeNet)
-The original DeepDream look. Eyes, slugs, and pagodas.
-```bash
-python dream.py --input img.jpg --model googlenet --layers inception4c --octaves 4 --scale 1.4
-```
-
-### 2. The Painter (VGG16)
-Dense, rich textures. Great for artistic style transfer-like effects.
-```bash
-python dream.py --input img.jpg --model vgg16 --layers relu4_3 --steps 20
-```
-
-### 3. The Modernist (ResNet50)
-Sharp, geometric, and sometimes abstract architectural hallucinations.
-```bash
-python dream.py --input img.jpg --model resnet50 --layers layer4_2
-```
-
-## 🛠 Advanced Usage
-
-### Converting Models
-We include a universal converter that ingests standard PyTorch (`.pth`) and legacy Torch7 (`.t7`) models, optimizing them into MLX format (`float16` by default).
+## Run a Dream
 
 ```bash
-# Convert a local file
-python convert.py --scan path/to/models
+# Classic look (GoogLeNet, default layers inception3b/4c/4d)
+python dream.py --input assets/demo_googlenet.jpg --output dream.jpg \
+  --model googlenet --octaves 4 --scale 1.4 --steps 16
 
-# Download & Convert Places365 (AlexNet, ResNet, etc.)
+# Painterly textures (VGG16) with a preset
+python dream.py --input assets/demo_vgg16.jpg --output dream_vgg16.jpg \
+  --model vgg16 --preset nb20 --steps 20
+
+# Guided dreaming
+python dream.py --input assets/demo_vgg16.jpg --guide assets/demo_googlenet.jpg \
+  --model vgg16 --layers relu4_3 --steps 18 --octaves 4
+
+# Compare everything in one go
+python dream.py --input assets/demo_vgg19.jpg --model all
+```
+
+Default layers per model: VGG16 `relu4_3`, VGG19 `relu4_4`, ResNet50 `layer4_2`, AlexNet `relu5`, GoogLeNet `inception3b/4c/4d`. Override with `--layers layer1 layer2 ...` as needed.
+
+## Download Weights from Hugging Face
+
+```bash
+pip install huggingface_hub
+
+# Core checkpoints
+huggingface-cli download NickMystic/DeepDream-MLX googlenet_mlx.npz --local-dir .
+huggingface-cli download NickMystic/DeepDream-MLX vgg16_mlx.npz --local-dir .
+huggingface-cli download NickMystic/DeepDream-MLX resnet50_mlx.npz --local-dir .
+
+# Optional variants
+huggingface-cli download NickMystic/DeepDream-MLX googlenet_mlx_bf16.npz --local-dir .
+huggingface-cli download NickMystic/DeepDream-MLX resnet50_places365_mlx.npz --local-dir .
+huggingface-cli download NickMystic/DeepDream-MLX alexnet_places365_mlx.npz --local-dir .
+```
+
+Programmatic fetch:
+
+```python
+from huggingface_hub import hf_hub_download
+
+path = hf_hub_download(repo_id="NickMystic/DeepDream-MLX", filename="googlenet_mlx.npz")
+print(path)  # local cache path to pass into --weights
+```
+
+## Zoom Video Loop
+
+```bash
+python dream_video.py --input assets/example_googlenet.jpg --output_dir frames \
+  --model googlenet --layers inception4c --frames 120 --zoom_factor 1.05
+
+# Assemble video (requires ffmpeg)
+ffmpeg -framerate 15 -i frames/frame_%04d.jpg -c:v libx264 -pix_fmt yuv420p dream_zoom.mp4
+```
+
+## Convert or Add Checkpoints
+
+```bash
+# Convert anything already in toConvert/
+python convert.py --scan toConvert/
+
+# Download common Torch7/PyTorch models and convert automatically
 python convert.py --download all
 ```
 
-### Benchmarking
-Verify performance on your machine.
+All large `.npz` remain in Git LFS; keep `toConvert/` free of raw blobs before publishing.
+
+## Benchmark & Quantize
+
 ```bash
 python benchmark.py
+python quantize_experiment.py --model googlenet
 ```
 
-## ⚖️ Performance (M2 Max)
+## License
 
-| Framework | Model | Precision | Speed |
-| :--- | :--- | :--- | :--- |
-| **MLX** | GoogLeNet | **float16** | **~3.6s** |
-| PyTorch (MPS) | GoogLeNet | float32 | ~4.5s |
-
-*Benchmarks run at 400px width, 10 iterations.*
-
----
-*Built for the dreamers.*
+Apache-2.0 (see `LICENSE`).
