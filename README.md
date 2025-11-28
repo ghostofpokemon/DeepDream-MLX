@@ -31,9 +31,13 @@ DeepDream-MLX brings the original psychedelic computer vision look to Apple Sili
 
 ## Install
 
+Bring your own env (conda/uv/venv/none) as you prefer:
+
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+# using uv (optional)
+uv pip install -r requirements.txt
+
+# or plain pip
 pip install -r requirements.txt
 ```
 
@@ -58,7 +62,9 @@ python dream.py --input assets/demo_vgg19.jpg --model all
 
 Default layers per model: VGG16 `relu4_3`, VGG19 `relu4_4`, ResNet50 `layer4_2`, AlexNet `relu5`, GoogLeNet `inception3b/4c/4d`. Override with `--layers layer1 layer2 ...` as needed.
 
-## Download Weights from Hugging Face
+## Weights (local + optional Hugging Face)
+
+Core `.npz` weights live in this repo via LFS. If you want a fresh copy or a variant, optionally pull from Hugging Face:
 
 ```bash
 pip install huggingface_hub
