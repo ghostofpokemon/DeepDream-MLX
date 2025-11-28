@@ -4,6 +4,7 @@ __pycache__/
 pics/
 Agents.md
 toConvert/
+caffe/
 
 # Ignore images generally
 *.jpg

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import os
 import time
@@ -13,6 +14,7 @@ from mlx_googlenet import GoogLeNet
 from mlx_resnet50 import ResNet50
 from mlx_vgg16 import VGG16
 from mlx_vgg19 import VGG19
+from mlx_alexnet import AlexNet
 
 IMAGENET_MEAN = mx.array([0.485, 0.456, 0.406])
 IMAGENET_STD = mx.array([0.229, 0.224, 0.225])
@@ -313,6 +315,11 @@ def run_dream_for_model(model_name, args, img_np):
         weights = get_weights_path("resnet50", args.weights)
         default_layers = ["layer4_2"]
 
+    elif model_name == "alexnet":
+        model = AlexNet()
+        weights = get_weights_path("alexnet", args.weights)
+        default_layers = ["relu5"]
+
     else:  # googlenet
         model = GoogLeNet()
         weights = get_weights_path("googlenet", args.weights)
@@ -380,7 +387,7 @@ def parse_args():
 
     p.add_argument(
         "--model",
-        choices=["vgg16", "vgg19", "googlenet", "resnet50", "all"],
+        choices=["vgg16", "vgg19", "googlenet", "resnet50", "alexnet", "all"],
         default="vgg16",
         help="Model to use. 'all' runs all models.",
     )
@@ -427,7 +434,7 @@ def main():
     img_np = load_image(args.input, args.width)
 
     if args.model == "all":
-        models = ["vgg16", "vgg19", "googlenet", "resnet50"]
+        models = ["vgg16", "vgg19", "googlenet", "resnet50", "alexnet"]
         if args.output:
             print(
                 "Warning: --output argument ignored because --model='all' was selected."
