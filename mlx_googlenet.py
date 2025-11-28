@@ -162,3 +162,44 @@ class GoogLeNet(nn.Module):
         load_inception("inception4e", self.inception4e)
         load_inception("inception5a", self.inception5a)
         load_inception("inception5b", self.inception5b)
+
+
+class AuxHead(nn.Module):
+    def __init__(self, in_ch, num_classes, dropout=0.7):
+        super().__init__()
+        self.avgpool = nn.AvgPool2d(kernel_size=5, stride=3)
+        self.proj = _conv_bn(in_ch, 128, 1)
+        self.fc1 = nn.Linear(2048, 1024)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(1024, num_classes)
+
+    def __call__(self, x):
+        x = self.avgpool(x)
+        x = self.proj(x)
+        x = mx.flatten(x, start_axis=1)
+        x = self.relu(self.fc1(x))
+        x = self.dropout(x)
+        return self.fc2(x)
+
+
+class GoogLeNetTrain(GoogLeNet):
+    def __init__(self, num_classes, aux_weight=0.3, use_aux=True):
+        super().__init__()
+        self.global_dropout = nn.Dropout(0.4)
+        self.fc = nn.Linear(1024, num_classes)
+        self.use_aux = use_aux
+        self.aux_weight = aux_weight
+        self.aux1 = AuxHead(512, num_classes)
+        self.aux2 = AuxHead(528, num_classes)
+
+    def forward_logits(self, x, train=False):
+        x, endpoints = self.forward_with_endpoints(x)
+        pooled = mx.mean(x, axis=(1, 2))
+        logits = self.fc(self.global_dropout(pooled))
+
+        aux1_logits = aux2_logits = None
+        if train and self.use_aux:
+            aux1_logits = self.aux1(endpoints["inception4a"])
+            aux2_logits = self.aux2(endpoints["inception4d"])
+        return logits, aux1_logits, aux2_logits

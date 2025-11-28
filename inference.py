@@ -1,6 +1,7 @@
 import mlx.core as mx
 import numpy as np
 from PIL import Image
+from dream import get_weights_path
 from mlx_googlenet import GoogLeNet
 # from mlx_vgg16 import VGG16 # Uncomment to use VGG16
 # from mlx_vgg19 import VGG19 # Uncomment to use VGG19
@@ -43,13 +44,9 @@ def main():
     # --- Load GoogleNet model and weights ---
     print("Loading GoogleNet model...")
     model = GoogLeNet()
-    try:
-        model.load_npz("googlenet_mlx.npz")
-        print("GoogleNet weights loaded successfully.")
-    except FileNotFoundError:
-        print("Error: googlenet_mlx.npz not found.")
-        print("Ensure 'googlenet_mlx.npz' is in the same directory as this script.")
-        return
+    weights_path = get_weights_path("googlenet")
+    model.load_npz(weights_path)
+    print(f"GoogleNet weights loaded from: {weights_path}")
 
     # --- Perform inference ---
     print("Performing inference...")

@@ -9,10 +9,6 @@ import mlx.nn as nn
 import numpy as np
 import scipy.ndimage as nd
 from PIL import Image
-try:
-    from huggingface_hub import hf_hub_download
-except ImportError:
-    hf_hub_download = None
 
 from mlx_googlenet import GoogLeNet
 from mlx_resnet50 import ResNet50
@@ -182,45 +178,20 @@ def deepdream(
 
 
 def get_weights_path(model_name, explicit_path=None):
-    """
-    Resolve weights path; auto-download from Hugging Face if missing.
-    """
-    repo_id = "NickMystic/DeepDream-MLX"
-    candidates = []
     if explicit_path:
-        candidates.append(explicit_path)
-    else:
-        candidates.append(f"{model_name}_mlx.npz")
-        candidates.append(f"{model_name}_mlx_bf16.npz")
+        return explicit_path
 
-    # 1) Existing local file wins
-    for path in candidates:
-        if os.path.exists(path):
-            return path
+    # 1. Try standard MLX export (float16/bf16 default)
+    path = f"{model_name}_mlx.npz"
+    if os.path.exists(path):
+        return path
 
-    # 2) Try grabbing from Hugging Face cache
-    if hf_hub_download is None:
-        raise FileNotFoundError(
-            f"Missing weights for {model_name}. Install huggingface_hub or place {candidates[0]} locally."
-        )
-
-    download_errors = []
-    for filename in candidates:
-        try:
-            print(f"Downloading {filename} from {repo_id} via huggingface_hub...")
-            dl_path = hf_hub_download(
-                repo_id=repo_id,
-                filename=os.path.basename(filename),
-                resume_download=True,
-                cache_dir=None,  # default HF cache (~/.cache/huggingface/hub)
-            )
-            return dl_path
-        except Exception as exc:
-            download_errors.append(f"{filename}: {exc}")
-
-    raise FileNotFoundError(
-        f"Could not resolve weights for {model_name}. Tried {candidates}. Errors: {download_errors}"
-    )
+    # 2. Try explicit bf16 suffix (legacy)
+    bf16_path = f"{model_name}_mlx_bf16.npz"
+    if os.path.exists(bf16_path):
+        return bf16_path
+        
+    return path # Return default for error message context
 
 
 def run_dream_for_model(model_name, args, img_np):

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import os
 import time
@@ -8,17 +7,12 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
 import scipy.ndimage as nd
+from mlx_resnet50 import ResNet50
 from PIL import Image
-try:
-    from huggingface_hub import hf_hub_download
-except ImportError:
-    hf_hub_download = None
 
 from mlx_googlenet import GoogLeNet
-from mlx_resnet50 import ResNet50
 from mlx_vgg16 import VGG16
 from mlx_vgg19 import VGG19
-from mlx_alexnet import AlexNet
 
 IMAGENET_MEAN = mx.array([0.485, 0.456, 0.406])
 IMAGENET_STD = mx.array([0.229, 0.224, 0.225])
@@ -68,7 +62,7 @@ def gaussian_kernel(sigma, truncate=4.0, fixed_radius=None):
         radius = fixed_radius
     else:
         radius = int(truncate * sigma + 0.5)
-
+        
     x = mx.arange(-radius, radius + 1)
     kernel = mx.exp(-0.5 * (x / sigma) ** 2)
     kernel = kernel / kernel.sum()
@@ -81,14 +75,14 @@ def gaussian_blur_2d(x, sigma, fixed_radius=None):
     kernel = kernel.astype(x.dtype)
     k_size = kernel.shape[0]
     C = x.shape[-1]
-
+    
     k_x = kernel.reshape(1, 1, k_size, 1)
     k_x = mx.repeat(k_x, C, axis=0)
     k_y = kernel.reshape(1, k_size, 1, 1)
     k_y = mx.repeat(k_y, C, axis=0)
-
+    
     pad = k_size // 2
-
+    
     x = mx.conv2d(x, k_x, stride=1, padding=(0, pad), groups=C)
     x = mx.conv2d(x, k_y, stride=1, padding=(pad, 0), groups=C)
     return x
@@ -100,7 +94,7 @@ def smooth_gradients(grad, sigma, fixed_radius=None):
     smoothed = []
     for s in sigmas:
         smoothed.append(gaussian_blur_2d(grad, s, fixed_radius=fixed_radius))
-
+    
     g_total = smoothed[0]
     for i in range(1, len(smoothed)):
         g_total = g_total + smoothed[i]
@@ -141,7 +135,7 @@ def deepdream(
         if guide_img_np is not None:
             guide_resized = resize_bilinear(preprocess(guide_img_np), nh, nw)
             _, guide_features = model.forward_with_endpoints(guide_resized)
-
+        
         def loss_fn(x):
             endpoints = model.forward_with_endpoints(x)[1]
             loss = mx.zeros(())
@@ -171,62 +165,19 @@ def deepdream(
         for it in range(steps):
             ox, oy = np.random.randint(-jitter, jitter + 1, 2)
             rolled = mx.roll(mx.roll(img, ox, axis=1), oy, axis=2)
-
+            
             sigma_val = ((it + 1) / steps) * 2.0 + smoothing
-
+            
             rolled, loss = update_step(rolled, mx.array(sigma_val))
-
+            
             img = mx.roll(mx.roll(rolled, -ox, axis=1), -oy, axis=2)
-
+            
     return deprocess(img)
-
-
-def get_weights_path(model_name, explicit_path=None):
-    """
-    Resolve weights path; auto-download from Hugging Face if missing.
-    """
-    repo_id = "NickMystic/DeepDream-MLX"
-    candidates = []
-    if explicit_path:
-        candidates.append(explicit_path)
-    else:
-        candidates.append(f"{model_name}_mlx.npz")
-        candidates.append(f"{model_name}_mlx_bf16.npz")
-
-    # 1) Existing local file wins
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-
-    # 2) Try grabbing from Hugging Face cache
-    if hf_hub_download is None:
-        raise FileNotFoundError(
-            f"Missing weights for {model_name}. Install huggingface_hub or place {candidates[0]} locally."
-        )
-
-    download_errors = []
-    for filename in candidates:
-        try:
-            print(f"Downloading {filename} from {repo_id} via huggingface_hub...")
-            dl_path = hf_hub_download(
-                repo_id=repo_id,
-                filename=os.path.basename(filename),
-                resume_download=True,
-                cache_dir=None,  # default HF cache (~/.cache/huggingface/hub)
-            )
-            return dl_path
-        except Exception as exc:
-            download_errors.append(f"{filename}: {exc}")
-
-    raise FileNotFoundError(
-        f"Could not resolve weights for {model_name}. Tried {candidates}. Errors: {download_errors}"
-    )
 
 
 def run_dream_for_model(model_name, args, img_np):
     print(f"--- Running DeepDream with {model_name} ---")
-
-    # ... (PRESETS dict remains here) ...
+    
     # Notebook presets
     PRESETS = {
         "nb14": {
@@ -258,7 +209,7 @@ def run_dream_for_model(model_name, args, img_np):
         },
     }
 
-    # Set up model, weights, and defaults
+    # Defaults
     current_layers = args.layers
     current_steps = args.steps
     current_lr = args.lr
@@ -267,9 +218,10 @@ def run_dream_for_model(model_name, args, img_np):
     current_jitter = args.jitter
     current_smoothing = args.smoothing
 
+    # Model specific logic
     if model_name == "vgg16":
         model = VGG16()
-        weights = get_weights_path("vgg16", args.weights)
+        weights = args.weights or "vgg16_mlx.npz"
         default_layers = ["relu4_3"]
         if args.preset:
             p = PRESETS[args.preset]
@@ -281,10 +233,10 @@ def run_dream_for_model(model_name, args, img_np):
             current_scale = p["scale"]
             current_jitter = p["jitter"]
             current_smoothing = p["smoothing"]
-
+            
     elif model_name == "vgg19":
         model = VGG19()
-        weights = get_weights_path("vgg19", args.weights)
+        weights = args.weights or "vgg19_mlx.npz"
         default_layers = ["relu4_4"]
         if args.preset and args.preset in PRESETS:
             p = PRESETS[args.preset]
@@ -295,27 +247,21 @@ def run_dream_for_model(model_name, args, img_np):
             current_scale = p["scale"]
             current_jitter = p["jitter"]
             current_smoothing = p["smoothing"]
-
+            
     elif model_name == "resnet50":
         model = ResNet50()
-        weights = get_weights_path("resnet50", args.weights)
+        weights = args.weights or "resnet50_mlx.npz"
         default_layers = ["layer4_2"]
-
-    elif model_name == "alexnet":
-        model = AlexNet()
-        weights = get_weights_path("alexnet", args.weights)
-        default_layers = ["relu5"]
-
-    else:  # googlenet
+        
+    else: # googlenet
         model = GoogLeNet()
-        weights = get_weights_path("googlenet", args.weights)
+        weights = args.weights or "googlenet_mlx.npz"
         default_layers = ["inception3b", "inception4c", "inception4d"]
 
     if not os.path.exists(weights):
         print(f"Error: Weights NPZ not found: {weights}. Skipping {model_name}.")
         return
 
-    print(f"Loading weights from: {weights}")
     model.load_npz(weights)
 
     guide_img_np = None
@@ -338,10 +284,10 @@ def run_dream_for_model(model_name, args, img_np):
         smoothing=current_smoothing,
         guide_img_np=guide_img_np,
     )
-
+    
     end_time = time.time()
     elapsed = end_time - start_time
-
+    
     if args.output:
         out = args.output
     else:
@@ -360,58 +306,36 @@ def parse_args():
     p.add_argument("--input", required=True, help="Input image path")
     p.add_argument("--output", help="Output image path (optional)")
     p.add_argument("--guide", help="Guide image for guided dreaming")
-
-    p.add_argument(
-        "--width",
-        type=int,
-        default=None,
-        help="Resize input to width (maintains aspect ratio)",
-    )
-    p.add_argument(
-        "--img_width", type=int, help="Alias for --width", dest="width"
-    )  # Alias
-
+    
+    p.add_argument("--width", type=int, default=None, help="Resize input to width (maintains aspect ratio)")
+    p.add_argument("--img_width", type=int, help="Alias for --width", dest="width") # Alias
+    
     p.add_argument(
         "--model",
-        choices=["vgg16", "vgg19", "googlenet", "resnet50", "alexnet", "all"],
+        choices=["vgg16", "vgg19", "googlenet", "resnet50", "all"],
         default="vgg16",
         help="Model to use. 'all' runs all models.",
     )
     p.add_argument("--preset", choices=["nb14", "nb20", "nb28"], help="VGG16 presets")
-
+    
     p.add_argument("--layers", nargs="+", help="Layers to maximize")
-    p.add_argument(
-        "--steps", type=int, default=10, help="Gradient ascent steps per octave"
-    )
+    p.add_argument("--steps", type=int, default=10, help="Gradient ascent steps per octave")
     p.add_argument("--lr", type=float, default=0.09, help="Learning rate (step size)")
-
+    
     p.add_argument("--octaves", type=int, default=4, help="Number of image octaves")
-    p.add_argument(
-        "--pyramid_size", type=int, dest="octaves", help="Alias for --octaves"
-    )  # Alias
-
+    p.add_argument("--pyramid_size", type=int, dest="octaves", help="Alias for --octaves") # Alias
+    
     p.add_argument("--scale", type=float, default=1.8, help="Octave scale factor")
-    p.add_argument(
-        "--pyramid_ratio", type=float, dest="scale", help="Alias for --scale"
-    )  # Alias
-    p.add_argument(
-        "--octave_scale", type=float, dest="scale", help="Alias for --scale"
-    )  # Alias
-
+    p.add_argument("--pyramid_ratio", type=float, dest="scale", help="Alias for --scale") # Alias
+    p.add_argument("--octave_scale", type=float, dest="scale", help="Alias for --scale") # Alias
+    
     p.add_argument("--jitter", type=int, default=32, help="Jitter amount (pixels)")
-
-    p.add_argument(
-        "--smoothing", type=float, default=0.5, help="Gradient smoothing strength"
-    )
-    p.add_argument(
-        "--smoothing_coefficient",
-        type=float,
-        dest="smoothing",
-        help="Alias for --smoothing",
-    )  # Alias
-
+    
+    p.add_argument("--smoothing", type=float, default=0.5, help="Gradient smoothing strength")
+    p.add_argument("--smoothing_coefficient", type=float, dest="smoothing", help="Alias for --smoothing") # Alias
+    
     p.add_argument("--weights", help="Custom weights path")
-
+    
     return p.parse_args()
 
 
@@ -419,13 +343,11 @@ def main():
     args = parse_args()
     img_np = load_image(args.input, args.width)
 
-    if args.model == "all":
-        models = ["vgg16", "vgg19", "googlenet", "resnet50", "alexnet"]
+    if args.model == 'all':
+        models = ["vgg16", "vgg19", "googlenet", "resnet50"]
         if args.output:
-            print(
-                "Warning: --output argument ignored because --model='all' was selected."
-            )
-            args.output = None
+            print("Warning: --output argument ignored because --model='all' was selected.")
+            args.output = None 
         for m in models:
             run_dream_for_model(m, args, img_np)
     else:

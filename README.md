@@ -64,7 +64,8 @@ Default layers per model: VGG16 `relu4_3`, VGG19 `relu4_4`, ResNet50 `layer4_2`,
 
 ## Weights (local + optional Hugging Face)
 
-Core `.npz` weights live in this repo via LFS. If you want a fresh copy or a variant, optionally pull from Hugging Face:
+- `dream.py` will auto-download missing weights from Hugging Face (`NickMystic/DeepDream-MLX`) into your local cache.
+- Core `.npz` weights also live in this repo via LFS. If you want a fresh copy or a variant, optionally pull manually:
 
 ```bash
 pip install huggingface_hub
