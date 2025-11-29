@@ -126,6 +126,45 @@ MODEL_CONFIG = {
             "smoothing": (0.4, 0.55),
         },
     },
+    "mobilenet": {
+        "weights": "models/MobileNetV3_mlx.npz",
+        "hero": {
+            "layers": ["layer7", "layer9", "layer11"],
+            "steps": 72,
+            "lr": 0.18,
+            "octaves": 4,
+            "scale": 1.45,
+            "jitter": 28,
+            "smoothing": 0.45,
+        },
+        "layer_pool": [
+            "layer0",
+            "layer1",
+            "layer2",
+            "layer3",
+            "layer4",
+            "layer5",
+            "layer6",
+            "layer7",
+            "layer8",
+            "layer9",
+            "layer10",
+            "layer11",
+        ],
+        "classic_layers": [
+            ["layer6", "layer8"],
+            ["layer7", "layer9"],
+            ["layer8", "layer10", "layer11"],
+        ],
+        "classic_ranges": {
+            "steps": (50, 90),
+            "lr": (0.12, 0.22),
+            "octaves": (3, 5),
+            "scale": (1.3, 1.55),
+            "jitter": (20, 40),
+            "smoothing": (0.35, 0.55),
+        },
+    },
 }
 
 
