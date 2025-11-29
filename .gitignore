@@ -4,6 +4,11 @@ __pycache__/
 pics/
 borrowFrom/
 benchmark_results/
+.hf_cache/
+checkpoints/
+checkpoints_*/
+exports/
+tmp/
 
 # Large Model Files (Source)
 *.pth

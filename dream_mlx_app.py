@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
 import argparse
 import os
 import time
+import random
 from datetime import datetime
 
 import mlx.core as mx
@@ -9,18 +9,13 @@ import mlx.nn as nn
 import numpy as np
 import scipy.ndimage as nd
 from PIL import Image
-try:
-    from huggingface_hub import hf_hub_download
-except ImportError:
-    hf_hub_download = None
 
 from mlx_googlenet import GoogLeNet
 from mlx_resnet50 import ResNet50
 from mlx_vgg16 import VGG16
 from mlx_vgg19 import VGG19
-from mlx_alexnet import AlexNet
-from mlx_inception_v3 import InceptionV3
 from mlx_mobilenet import MobileNetV3Small_Defined
+from mlx_inception_v3 import InceptionV3
 
 IMAGENET_MEAN = mx.array([0.485, 0.456, 0.406])
 IMAGENET_STD = mx.array([0.229, 0.224, 0.225])
@@ -64,49 +59,17 @@ def resize_bilinear(x, new_h, new_w):
     return out
 
 
-def gaussian_kernel(sigma, truncate=4.0, fixed_radius=None):
-    """Generates a 1D Gaussian kernel."""
-    if fixed_radius is not None:
-        radius = fixed_radius
-    else:
-        radius = int(truncate * sigma + 0.5)
-
-    x = mx.arange(-radius, radius + 1)
-    kernel = mx.exp(-0.5 * (x / sigma) ** 2)
-    kernel = kernel / kernel.sum()
-    return kernel
-
-
-def gaussian_blur_2d(x, sigma, fixed_radius=None):
-    """Applies Gaussian blur using separable 1D convolutions in MLX."""
-    kernel = gaussian_kernel(sigma, fixed_radius=fixed_radius)
-    kernel = kernel.astype(x.dtype)
-    k_size = kernel.shape[0]
-    C = x.shape[-1]
-
-    k_x = kernel.reshape(1, 1, k_size, 1)
-    k_x = mx.repeat(k_x, C, axis=0)
-    k_y = kernel.reshape(1, k_size, 1, 1)
-    k_y = mx.repeat(k_y, C, axis=0)
-
-    pad = k_size // 2
-
-    x = mx.conv2d(x, k_x, stride=1, padding=(0, pad), groups=C)
-    x = mx.conv2d(x, k_y, stride=1, padding=(pad, 0), groups=C)
-    return x
-
-
-def smooth_gradients(grad, sigma, fixed_radius=None):
-    """Cascade 3 Gaussian blurs (sigma multipliers 0.5/1/2) using native MLX ops."""
+def smooth_gradients(grad, sigma):
+    """Cascade 3 Gaussian blurs (sigma multipliers 0.5/1/2) like deepdream.py."""
+    g_np = np.array(grad)
     sigmas = [sigma * 0.5, sigma * 1.0, sigma * 2.0]
     smoothed = []
     for s in sigmas:
-        smoothed.append(gaussian_blur_2d(grad, s, fixed_radius=fixed_radius))
-
-    g_total = smoothed[0]
-    for i in range(1, len(smoothed)):
-        g_total = g_total + smoothed[i]
-    return g_total / len(smoothed)
+        smoothed.append(
+            nd.gaussian_filter(g_np, sigma=(0, s, s, 0), mode="reflect")
+        )
+    g_np = sum(smoothed) / len(smoothed)
+    return mx.array(g_np, dtype=grad.dtype)
 
 
 def get_pyramid_shapes(base_shape, num_octaves, scale):
@@ -116,7 +79,21 @@ def get_pyramid_shapes(base_shape, num_octaves, scale):
         exponent = level - num_octaves + 1
         nh = max(1, int(round(h * (scale**exponent))))
         nw = max(1, int(round(w * (scale**exponent))))
+        
+        # Ensure minimum dimension to avoid pooling errors
+        # GoogLeNet/VGG need at least ~16-32px for deep layers
+        if nh < 32 or nw < 32:
+            continue
+            
         shapes.append((nh, nw))
+    
+    # Ensure the original size is always included as the last step if the loop logic allows,
+    # but with this logic, the last step (level = num_octaves - 1) gives exponent 0 -> scale^0 = 1.
+    # So the last shape IS the original shape.
+    # If all shapes were filtered out, we must at least run on the original size.
+    if not shapes:
+        shapes.append((h, w))
+        
     return shapes
 
 
@@ -144,85 +121,54 @@ def deepdream(
             guide_resized = resize_bilinear(preprocess(guide_img_np), nh, nw)
             _, guide_features = model.forward_with_endpoints(guide_resized)
 
-        def loss_fn(x):
-            endpoints = model.forward_with_endpoints(x)[1]
-            loss = mx.zeros(())
-            for name in layers:
-                act = endpoints[name]
-                if guide_img_np is not None:
-                    guide_act = guide_features[name]
-                    loss = loss + mx.mean(act * guide_act)
-                else:
-                    loss = loss + mx.mean(act * act)
-            return loss / len(layers)
-
-        # Calculate max radius needed for static compilation
-        max_effective_sigma = 2.0 * (2.0 + smoothing)
-        fixed_radius = int(4.0 * max_effective_sigma + 0.5)
-
-        @mx.compile
-        def update_step(x, sigma):
-            loss, grads = mx.value_and_grad(loss_fn)(x)
-            g = smooth_gradients(grads, sigma, fixed_radius=fixed_radius)
-            g = g - mx.mean(g)
-            g = g / (mx.std(g) + 1e-8)
-            x = x + lr * g
-            x = mx.minimum(mx.maximum(x, LOWER_IMAGE_BOUND), UPPER_IMAGE_BOUND)
-            return x, loss
-
         for it in range(steps):
             ox, oy = np.random.randint(-jitter, jitter + 1, 2)
             rolled = mx.roll(mx.roll(img, ox, axis=1), oy, axis=2)
 
+            def loss_fn(x):
+                endpoints = model.forward_with_endpoints(x)[1]
+                loss = mx.zeros(())
+                for name in layers:
+                    act = endpoints[name]
+                    if guide_img_np is not None:
+                        guide_act = guide_features[name]
+                        loss = loss + mx.mean(act * guide_act)
+                    else:
+                        loss = loss + mx.mean(act * act)
+                return loss / len(layers)
+
+            loss, grads = mx.value_and_grad(loss_fn)(rolled)
+            
             sigma_val = ((it + 1) / steps) * 2.0 + smoothing
-
-            rolled, loss = update_step(rolled, mx.array(sigma_val))
-
+            g = smooth_gradients(grads, sigma=sigma_val)
+            
+            g = g - mx.mean(g)
+            g = g / (mx.std(g) + 1e-8)
+            
+            rolled = rolled + lr * g
+            rolled = mx.minimum(mx.maximum(rolled, LOWER_IMAGE_BOUND), UPPER_IMAGE_BOUND)
+            
             img = mx.roll(mx.roll(rolled, -ox, axis=1), -oy, axis=2)
 
     return deprocess(img)
 
 
 def get_weights_path(model_name, explicit_path=None):
-    """
-    Resolve weights path; auto-download from Hugging Face if missing.
-    """
-    repo_id = "NickMystic/DeepDream-MLX"
-    candidates = []
     if explicit_path:
-        candidates.append(explicit_path)
-    else:
-        candidates.append(f"{model_name}_mlx.npz")
-        candidates.append(f"{model_name}_mlx_bf16.npz")
+        return explicit_path
+        
+    # Search locations: current dir, models/, deepdream-mlx-models/
+    prefixes = ["", "models/", "deepdream-mlx-models/"]
+    suffixes = ["_mlx_int8.npz", "_mlx_bf16.npz", "_mlx.npz"]
+    
+    for prefix in prefixes:
+        for suffix in suffixes:
+            path = f"{prefix}{model_name}{suffix}"
+            if os.path.exists(path):
+                return path
 
-    # 1) Existing local file wins
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-
-    # 2) Try grabbing from Hugging Face cache
-    if hf_hub_download is None:
-        raise FileNotFoundError(
-            f"Missing weights for {model_name}. Install huggingface_hub or place {candidates[0]} locally."
-        )
-
-    download_errors = []
-    for filename in candidates:
-        try:
-            print(f"Downloading {filename} from {repo_id} via huggingface_hub...")
-            dl_path = hf_hub_download(
-                repo_id=repo_id,
-                filename=os.path.basename(filename),
-                resume_download=True,
-                cache_dir=None,  # default HF cache (~/.cache/huggingface/hub)
-            )
-            return dl_path
-        except Exception as exc:
-            download_errors.append(f"{filename}: {exc}")
-
-    raise FileNotFoundError(
-        f"Could not resolve weights for {model_name}. Tried {candidates}. Errors: {download_errors}"
-    )
+    # Fallback default
+    return f"models/{model_name}_mlx.npz"
 
 
 def run_dream_for_model(model_name, args, img_np):
@@ -269,11 +215,26 @@ def run_dream_for_model(model_name, args, img_np):
     current_jitter = args.jitter
     current_smoothing = args.smoothing
 
+    if args.random:
+        print("--- Randomizing Parameters ---")
+        current_octaves = random.randint(3, 8)
+        current_scale = round(random.uniform(1.3, 1.6), 2)
+        current_steps = random.randint(10, 40)
+        current_lr = round(random.uniform(0.04, 0.12), 3)
+        current_jitter = random.randint(16, 64)
+        current_smoothing = round(random.uniform(0.1, 0.8), 2)
+        print(f"Randomized: octaves={current_octaves}, scale={current_scale}, steps={current_steps}, lr={current_lr}, jitter={current_jitter}, smoothing={current_smoothing}")
+
     if model_name == "vgg16":
         model = VGG16()
         weights = get_weights_path("vgg16", args.weights)
         default_layers = ["relu4_3"]
-        if args.preset:
+        # ... (existing VGG16 setup) ...
+        if args.random:
+             possible_layers = ["relu3_3", "relu4_1", "relu4_2", "relu4_3", "relu5_1", "relu5_2", "relu5_3"]
+             current_layers = random.sample(possible_layers, k=random.randint(1, 2))
+             print(f"Randomized Layers: {current_layers}")
+        elif args.preset:
             p = PRESETS[args.preset]
             # Apply preset overrides
             current_layers = p["layers"]
@@ -288,7 +249,11 @@ def run_dream_for_model(model_name, args, img_np):
         model = VGG19()
         weights = get_weights_path("vgg19", args.weights)
         default_layers = ["relu4_4"]
-        if args.preset and args.preset in PRESETS:
+        if args.random:
+             possible_layers = ["relu3_3", "relu4_1", "relu4_2", "relu4_3", "relu4_4", "relu5_1", "relu5_2", "relu5_3", "relu5_4"]
+             current_layers = random.sample(possible_layers, k=random.randint(1, 2))
+             print(f"Randomized Layers: {current_layers}")
+        elif args.preset and args.preset in PRESETS:
             p = PRESETS[args.preset]
             current_layers = p["layers"]
             current_steps = p["steps"]
@@ -302,24 +267,65 @@ def run_dream_for_model(model_name, args, img_np):
         model = ResNet50()
         weights = get_weights_path("resnet50", args.weights)
         default_layers = ["layer4_2"]
+        if args.random:
+             # ResNet50 layers
+             possible_layers = [f"layer{i}_{j}" for i in range(1, 5) for j in range(3)] + ["layer3_3", "layer3_4", "layer3_5"]
+             # Simple filter for valid ones based on standard ResNet50 blocks [3, 4, 6, 3]
+             # layer1: 0-2, layer2: 0-3, layer3: 0-5, layer4: 0-2
+             valid_resnet = []
+             for l in range(1, 5):
+                 valid_resnet.append(f"layer{l}")
+             for j in range(3): valid_resnet.append(f"layer1_{j}")
+             for j in range(4): valid_resnet.append(f"layer2_{j}")
+             for j in range(6): valid_resnet.append(f"layer3_{j}")
+             for j in range(3): valid_resnet.append(f"layer4_{j}")
+             
+             current_layers = random.sample(valid_resnet, k=random.randint(1, 2))
+             print(f"Randomized Layers: {current_layers}")
 
-    elif model_name == "alexnet":
-        model = AlexNet()
-        weights = get_weights_path("alexnet", args.weights)
-        default_layers = ["relu5"]
-    elif model_name == "inception_v3":
-        model = InceptionV3()
-        weights = get_weights_path("inception_v3", args.weights)
-        default_layers = ["Mixed_5d", "Mixed_6e", "Mixed_7c"]
-    elif model_name == "mobilenet_v3":
-        model = MobileNetV3Small_Defined()
-        weights = get_weights_path("MobileNetV3", args.weights)
-        default_layers = ["layer7", "layer9", "layer11"]
-
-    else:  # googlenet
+    elif model_name == "googlenet":
         model = GoogLeNet()
         weights = get_weights_path("googlenet", args.weights)
         default_layers = ["inception3b", "inception4c", "inception4d"]
+        if args.random:
+             possible_layers = ["inception3a", "inception3b", "inception4a", "inception4b", "inception4c", "inception4d", "inception4e", "inception5a", "inception5b"]
+             current_layers = random.sample(possible_layers, k=random.randint(1, 3))
+             print(f"Randomized Layers: {current_layers}")
+
+    elif model_name == "mobilenet":
+        model = MobileNetV3Small_Defined()
+        weights = get_weights_path("MobileNetV3", args.weights) # MobileNetV3_mlx.npz
+        default_layers = ["layer4", "layer9"]
+        if args.random:
+             possible_layers = [f"layer{i}" for i in range(13)]
+             current_layers = random.sample(possible_layers, k=random.randint(1, 3))
+             print(f"Randomized Layers: {current_layers}")
+
+    elif model_name == "inception_v3":
+        model = InceptionV3()
+        weights = get_weights_path("inception_v3", args.weights)
+        default_layers = ["Mixed_5b", "Mixed_6b", "Mixed_7b"]
+        if args.random:
+             possible_layers = ["Conv2d_2b_3x3", "Conv2d_3b_1x1", "Conv2d_4a_3x3", 
+                                "Mixed_5b", "Mixed_5c", "Mixed_5d", 
+                                "Mixed_6a", "Mixed_6b", "Mixed_6c", "Mixed_6d", "Mixed_6e", 
+                                "Mixed_7a", "Mixed_7b", "Mixed_7c"]
+             current_layers = random.sample(possible_layers, k=random.randint(1, 3))
+             print(f"Randomized Layers: {current_layers}")
+
+    # Validation: Check if current_layers are valid for the model to prevent KeyError
+    # If invalid, revert to default_layers
+    layers_to_check = current_layers or default_layers
+    is_valid = True
+    if model_name == "googlenet" and any("relu" in l or "layer" in l for l in layers_to_check): is_valid = False
+    if model_name.startswith("vgg") and any("inception" in l or "layer" in l for l in layers_to_check): is_valid = False
+    if model_name == "resnet50" and any("inception" in l or "relu" in l for l in layers_to_check): is_valid = False
+    if model_name == "mobilenet" and any("inception" in l or "relu" in l for l in layers_to_check): is_valid = False
+    if model_name == "inception_v3" and any("layer" in l or "relu" in l for l in layers_to_check): is_valid = False
+    
+    if not is_valid:
+        print(f"Warning: Layers {layers_to_check} seem invalid for {model_name}. Reverting to defaults: {default_layers}")
+        current_layers = default_layers
 
     if not os.path.exists(weights):
         print(f"Error: Weights NPZ not found: {weights}. Skipping {model_name}.")
@@ -383,7 +389,7 @@ def parse_args():
 
     p.add_argument(
         "--model",
-        choices=["vgg16", "vgg19", "googlenet", "resnet50", "alexnet", "inception_v3", "mobilenet_v3", "all"],
+        choices=["vgg16", "vgg19", "googlenet", "resnet50", "mobilenet", "inception_v3", "all"],
         default="vgg16",
         help="Model to use. 'all' runs all models.",
     )
@@ -422,6 +428,8 @@ def parse_args():
 
     p.add_argument("--weights", help="Custom weights path")
 
+    p.add_argument("--random", action="store_true", help="Randomize parameters (layers, octaves, scale, etc.)")
+
     return p.parse_args()
 
 
@@ -430,7 +438,7 @@ def main():
     img_np = load_image(args.input, args.width)
 
     if args.model == "all":
-        models = ["vgg16", "vgg19", "googlenet", "resnet50", "alexnet", "inception_v3", "mobilenet_v3"]
+        models = ["vgg16", "vgg19", "googlenet", "resnet50"]
         if args.output:
             print(
                 "Warning: --output argument ignored because --model='all' was selected."

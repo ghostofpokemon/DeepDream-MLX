@@ -169,7 +169,7 @@ class AuxHead(nn.Module):
         super().__init__()
         self.avgpool = nn.AvgPool2d(kernel_size=5, stride=3)
         self.proj = _conv_bn(in_ch, 128, 1)
-        self.fc1 = nn.Linear(2048, 1024)
+        self.fc1 = nn.Linear(128, 1024)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
         self.fc2 = nn.Linear(1024, num_classes)
@@ -177,7 +177,7 @@ class AuxHead(nn.Module):
     def __call__(self, x):
         x = self.avgpool(x)
         x = self.proj(x)
-        x = mx.flatten(x, start_axis=1)
+        x = mx.mean(x, axis=(1, 2))  # global average to stabilize feature size
         x = self.relu(self.fc1(x))
         x = self.dropout(x)
         return self.fc2(x)

@@ -3,3 +3,5 @@ numpy
 Pillow
 scipy
 huggingface_hub
+datasets
+tqdm

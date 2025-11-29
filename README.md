@@ -112,6 +112,37 @@ python convert.py --download all
 
 All large `.npz` remain in Git LFS; keep `toConvert/` free of raw blobs before publishing.
 
+## Train / Fine-Tune
+
+Hugging Face classification datasets with `image` + `label` columns are supported out of the box. Default example: the sketchy ImageNet variant for a weird baseline.
+
+```bash
+# Sketchy ImageNet -> fine-tune GoogLeNet, warm up fc/aux then unfreeze
+python train_dream.py --hf-dataset imagenet-sketch --epochs 8 --fc-warmup-epochs 2 \
+  --batch-size 24 --lr 1e-3 --export-dream exports/googlenet_sketch.npz
+```
+
+Swap `--hf-dataset` to any other HF dataset in the same format; `--val-split` can be added for validation. The trainer computes mean/std and an optional color decorrelation matrix and stores them alongside checkpoints and the dream-ready export.
+
+Local imagefolder + aspect preserved:
+```bash
+python train_dream.py --hf-dataset imagefolder --data-dir dataset/evangelion-ui \
+  --train-split train --val-split val --preserve-aspect
+```
+
+### Reusing this repo from a sibling app
+
+If you want the parent DeepDream UI (one directory up) to call directly into these MLX helpers instead of maintaining duplicated scripts:
+
+1. Install this project in editable mode so Python can import it anywhere: `pip install -e /Users/mystic/Programs/deepdream/deepdream-mlx-models`.
+2. Inside the parent app, import the shared functions/classes instead of copying code. Examples:
+   - Dreaming: `from dream import run_dream_for_model, load_image` and call `run_dream_for_model(model_name, args, load_image(path))`.
+   - Training: `from train_dream import main as train_main` to reuse the CLI entry point or `from mlx_googlenet import GoogLeNetTrain` if you need the modules directly.
+3. Share checkpoints/exports by pointing both projects to the same folders (e.g. `exports/`, `checkpoints_*`). When running from the parent app, pass the shared absolute paths so you never duplicate weights.
+4. Keep `dream_mlx_app.py` thin: parse app-specific flags there, then forward them to the imported helpers from this repo. This ensures new model additions (like Inception V3 / MobileNet V3) automatically become available everywhere.
+
+Following that pattern means this repo stays the single source of truth for dreaming/training logic while the parent UI only worries about UX.
+
 ## Benchmark & Quantize
 
 ```bash

@@ -58,5 +58,17 @@ The "Zoom" video effect is the second pillar of DeepDream.
 *   **Cleanup:** Ensure `toConvert/` is empty of large raw files.
 *   **Banner:** `assets/deepdream_header.jpg`.
 
+## 6. Dream-Creator MLX Port
+Goal: migrate ProGamerGov's `dream-creator` (PyTorch) workflow into this MLX repo without losing its fine-grained controls.
+
+**Plan:**
+1.  **Inventory parity:** list dream-creator's components (trainer, dataset tools, visualization scripts) and map them to current MLX equivalents.
+2.  **Port trainer knobs:** expose classic flags (`-freeze_to`, `-balance_classes`, CSV logging) in MLX, either via compatibility wrapper or `MODEL_CONFIG` extensions.
+3.  **Rebuild utilities:** re-implement key dataset scripts (`remove_bad`, `resize_data`, `calc_ms`, `calc_cm`) in MLX/Python so the workflow matches dream-creator’s prep steps.
+4.  **Visualization:** MLX-ify `vis.py / vis_multi.py` features (FFT decorrelation, tiling) or ensure `dream.py/sample_dreams.py` cover the same ground.
+5.  **Integration:** package the ported modules alongside existing MLX tooling so future users—and the parent app—can switch between “classic” dream-creator commands and the new trainer seamlessly.
+
+Document progress + any divergences here before resetting context so agents stay aligned.
+
 ---
 *Docs derived from deep analysis of `dream-creator` and classic Caffe workflows.*
