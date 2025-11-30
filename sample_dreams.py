@@ -173,7 +173,9 @@ def resolve_dream_script(path_override: str | None) -> Path:
         return Path(path_override).resolve()
     this_dir = Path(__file__).resolve().parent
     candidates = [
+        this_dir / "dream.py",
         this_dir / "dream_mlx.py",
+        this_dir.parent / "dream.py",
         this_dir.parent / "dream_mlx.py",
     ]
     for cand in candidates:
