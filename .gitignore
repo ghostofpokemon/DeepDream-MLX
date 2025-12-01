@@ -33,3 +33,9 @@ toConvert/*
 toConvert/
 comparisons/
 TRAINING_PIPELINE.md
+dataset/
+dataset/*
+checkpoints*
+wandb
+assets/.DS_Store
+assets/tmp_banner/
