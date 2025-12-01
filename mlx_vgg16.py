@@ -101,3 +101,94 @@ class VGG16(nn.Module):
             
             conv.weight = load_weight(weight_key, transpose=True)
             conv.bias = load_weight(bias_key)
+
+
+class VGG16Train(VGG16):
+
+
+    def __init__(self, num_classes, aux_weight=0.3, use_aux=False):
+
+
+        super().__init__()
+
+
+        # VGG16 typically ends with a 7x7 feature map before classification
+
+
+        # The last conv layer output is 512 channels
+
+
+        # We replace AdaptiveAvgPool2d((1, 1)) with a manual mean which is equivalent
+
+
+        self.classifier = nn.Sequential(
+
+
+            nn.Linear(512, 4096),
+
+
+            nn.ReLU(),
+
+
+            nn.Dropout(0.5),
+
+
+            nn.Linear(4096, 4096),
+
+
+            nn.ReLU(),
+
+
+            nn.Dropout(0.5),
+
+
+            nn.Linear(4096, num_classes),
+
+
+        )
+
+
+        # VGG16 does not have auxiliary heads
+
+
+        self.use_aux = use_aux # ensure this is False
+
+
+
+
+
+    def forward_logits(self, x, train=False):
+
+
+        # Pass through the VGG feature extractor
+
+
+        x, _ = self.forward_with_endpoints(x)
+
+
+        
+
+
+        # Global Average Pooling: (B, H, W, C) -> (B, C)
+
+
+        # This is equivalent to AdaptiveAvgPool2d((1, 1)) followed by Flatten
+
+
+        x = mx.mean(x, axis=(1, 2))
+
+
+        
+
+
+        # Pass through the classifier head
+
+
+        logits = self.classifier(x)
+
+
+        
+
+
+        return logits, None, None # VGG16 does not have aux heads
+

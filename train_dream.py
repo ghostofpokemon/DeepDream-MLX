@@ -18,17 +18,21 @@ import os
 import random
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
+import time
 
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
+import wandb
 from datasets import ClassLabel, Value, load_dataset
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps
 from tqdm import tqdm
 
 from mlx_googlenet import GoogLeNetTrain
 from mlx_inception_v3 import InceptionV3Train, InceptionA, InceptionB, InceptionC, InceptionD, InceptionE
+from mlx_vgg16 import VGG16Train
+from mlx_mobilenet import MobileNetV3SmallTrain
 
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
@@ -100,7 +104,148 @@ MODEL_CONFIG = {
         ],
         "warmup_trainable": ["fc", "aux_classifier"],
     },
+    "vgg16": {
+        "class": VGG16Train,
+        "freeze_prefixes": [
+            "layers.0",  # conv1_1
+            "layers.2",  # conv1_2
+            "layers.5",  # conv2_1
+            "layers.7",  # conv2_2
+            "layers.10", # conv3_1
+            "layers.12", # conv3_2
+            "layers.14", # conv3_3
+        ],
+        "warmup_freeze_prefixes": [
+            "layers.0",
+            "layers.2",
+            "layers.5",
+            "layers.7",
+            "layers.10",
+            "layers.12",
+            "layers.14",
+            "layers.17", # conv4_1
+            "layers.19", # conv4_2
+            "layers.21", # conv4_3
+            "layers.24", # conv5_1
+            "layers.26", # conv5_2
+            "layers.28", # conv5_3
+            "classifier",
+        ],
+        "warmup_trainable": ["classifier"],
+    },
+    "mobilenet": {
+        "class": MobileNetV3SmallTrain,
+        "freeze_prefixes": [
+            "layer0",
+            "layer1",
+            "layer2",
+            "layer3",
+        ],
+        "warmup_freeze_prefixes": [
+            "layer0",
+            "layer1",
+            "layer2",
+            "layer3",
+            "layer4",
+            "layer5",
+            "layer6",
+            "layer7",
+            "layer8",
+            "layer9",
+            "layer10",
+            "layer11",
+            "layer12",
+            "last_conv",
+            "classifier",
+        ],
+        "warmup_trainable": ["classifier"],
+    },
 }
+
+GOOGLENET_LAYER_ORDER = [
+    "conv1",
+    "conv2",
+    "conv3",
+    "inception3a",
+    "inception3b",
+    "inception4a",
+    "inception4b",
+    "inception4c",
+    "inception4d",
+    "inception4e",
+    "inception5a",
+    "inception5b",
+]
+
+VGG16_LAYER_ORDER = [
+    "layers.0",  # conv1_1
+    "layers.2",  # conv1_2
+    "layers.5",  # conv2_1
+    "layers.7",  # conv2_2
+    "layers.10", # conv3_1
+    "layers.12", # conv3_2
+    "layers.14", # conv3_3
+    "layers.17", # conv4_1
+    "layers.19", # conv4_2
+    "layers.21", # conv4_3
+    "layers.24", # conv5_1
+    "layers.26", # conv5_2
+    "layers.28", # conv5_3
+]
+
+MOBILENET_LAYER_ORDER = [
+    "layer0",
+    "layer1",
+    "layer2",
+    "layer3",
+    "layer4",
+    "layer5",
+    "layer6",
+    "layer7",
+    "layer8",
+    "layer9",
+    "layer10",
+    "layer11",
+    "layer12",
+    "last_conv",
+]
+
+INCEPTION_V3_LAYER_ORDER = [
+    "Conv2d_1a_3x3",
+    "Conv2d_2a_3x3",
+    "Conv2d_2b_3x3",
+    "Conv2d_3b_1x1",
+    "Conv2d_4a_3x3",
+    "Mixed_5b",
+    "Mixed_5c",
+    "Mixed_5d",
+    "Mixed_6a",
+    "Mixed_6b",
+    "Mixed_6c",
+    "Mixed_6d",
+    "Mixed_6e",
+    "Mixed_7a",
+    "Mixed_7b",
+    "Mixed_7c",
+]
+
+def aux_prefixes(idx: int, target: str) -> List[str]:
+    mapping = {
+        "loss_conv": ["aux{idx}.proj"],
+        "loss_fc": ["aux{idx}.proj", "aux{idx}.fc1"],
+        "loss_classifier": ["aux{idx}.proj", "aux{idx}.fc1", "aux{idx}.fc2"],
+    }
+    order = ["loss_conv", "loss_fc", "loss_classifier"]
+    prefixes: List[str] = []
+    for name in order:
+        for p in mapping[name]:
+            prefix = p.format(idx=idx)
+            if prefix not in prefixes:
+                prefixes.append(prefix)
+        if name == target:
+            break
+    return prefixes
+
 
 
 def to_pil(image) -> Image.Image:
@@ -146,6 +291,51 @@ def pad_to_square(img: Image.Image, size: int, fill=(0, 0, 0)) -> Image.Image:
     paste_y = (size - new_h) // 2
     canvas.paste(resized, (paste_x, paste_y))
     return canvas
+
+
+def crop_or_pad(img: Image.Image, target_w: int, target_h: int, fill=(0, 0, 0)) -> Image.Image:
+    w, h = img.size
+    if w > target_w or h > target_h:
+        left = max(0, (w - target_w) // 2)
+        top = max(0, (h - target_h) // 2)
+        img = img.crop((left, top, left + target_w, top + target_h))
+        w, h = img.size
+    if w < target_w or h < target_h:
+        canvas = Image.new("RGB", (target_w, target_h), fill)
+        canvas.paste(img, ((target_w - w) // 2, (target_h - h) // 2))
+        img = canvas
+    return img
+
+
+def apply_augmentations(
+    img: Image.Image,
+    fill_color=(0, 0, 0),
+    rotate_deg: float = 0.0,
+    zoom_range: float = 0.0,
+    brightness: float = 0.0,
+    horizontal_flip: bool = True,
+) -> Image.Image:
+    orig_w, orig_h = img.size
+    out = img
+    if horizontal_flip and random.random() < 0.5:
+        out = ImageOps.mirror(out)
+    if rotate_deg and rotate_deg > 0:
+        angle = random.uniform(-rotate_deg, rotate_deg)
+        out = out.rotate(angle, resample=Image.BILINEAR, expand=True, fillcolor=fill_color)
+        out = crop_or_pad(out, orig_w, orig_h, fill_color)
+    if zoom_range and zoom_range > 0:
+        lower = max(0.01, 1.0 - zoom_range)
+        scale = random.uniform(lower, 1.0 + zoom_range)
+        new_w = max(1, int(round(orig_w * scale)))
+        new_h = max(1, int(round(orig_h * scale)))
+        out = out.resize((new_w, new_h), Image.BILINEAR)
+        out = crop_or_pad(out, orig_w, orig_h, fill_color)
+    if brightness and brightness > 0:
+        factor = 1.0 + random.uniform(-brightness, brightness)
+        factor = max(0.1, factor)
+        enhancer = ImageEnhance.Brightness(out)
+        out = enhancer.enhance(factor)
+    return out
 
 
 def compute_mean_std(
@@ -213,6 +403,17 @@ def compute_color_decorrelation(
     return svd_sqrt.astype(np.float32)
 
 
+def compute_class_weights(train_ds, label_key: str, num_classes: int) -> np.ndarray:
+    counts = np.zeros(num_classes, dtype=np.float64)
+    labels = train_ds[label_key]
+    for lbl in labels:
+        counts[int(lbl)] += 1
+    counts[counts == 0] = 1.0
+    total = counts.sum()
+    weights = total / (num_classes * counts)
+    return weights.astype(np.float32)
+
+
 def iter_batches(
     dataset,
     image_key: str,
@@ -223,10 +424,19 @@ def iter_batches(
     batch_size: int,
     shuffle: bool,
     preserve_aspect: bool,
+    augment: bool = False,
+    aug_params: Optional[Dict] = None,
+    fill_color=(0, 0, 0),
 ) -> Iterable[Tuple[np.ndarray, np.ndarray]]:
     indices = list(range(len(dataset)))
     if shuffle:
         random.shuffle(indices)
+
+    aug_params = aug_params or {}
+    rotate_deg = aug_params.get("rotate", 0.0)
+    zoom_range = aug_params.get("zoom", 0.0)
+    brightness = aug_params.get("brightness", 0.0)
+    horizontal_flip = aug_params.get("hflip", True)
 
     for start in range(0, len(indices), batch_size):
         batch_idx = indices[start : start + batch_size]
@@ -234,7 +444,17 @@ def iter_batches(
         labels: List[int] = []
         for idx in batch_idx:
             row = dataset[idx]
-            imgs.append(resize_and_norm(row[image_key], image_size, mean, std, preserve_aspect))
+            pil_img = to_pil(row[image_key])
+            if augment:
+                pil_img = apply_augmentations(
+                    pil_img,
+                    fill_color=fill_color,
+                    rotate_deg=rotate_deg,
+                    zoom_range=zoom_range,
+                    brightness=brightness,
+                    horizontal_flip=horizontal_flip,
+                )
+            imgs.append(resize_and_norm(pil_img, image_size, mean, std, preserve_aspect))
             labels.append(int(row[label_key]))
         yield np.stack(imgs), np.array(labels, dtype=np.int32)
 
@@ -256,6 +476,27 @@ def accuracy_from_logits(logits, labels):
     preds = mx.argmax(logits, axis=-1)
     return mx.mean((preds == labels).astype(mx.float32))
 
+
+def weighted_cross_entropy(logits, labels, class_weights=None):
+    max_logit = mx.max(logits, axis=-1, keepdims=True)
+    stabilized = logits - max_logit
+    logsumexp = mx.log(mx.sum(mx.exp(stabilized), axis=-1) + 1e-8)
+    log_probs = stabilized - logsumexp[:, None]
+    # One-hot encoding
+    if hasattr(mx, "one_hot"):
+        one_hot = mx.one_hot(labels, logits.shape[-1])
+    else:
+        # Fallback for older MLX versions: create identity matrix and index it
+        one_hot = mx.eye(logits.shape[-1])[labels]
+
+    ce = -mx.sum(one_hot * log_probs, axis=-1)
+    if class_weights is not None:
+        sample_weights = mx.take(class_weights, labels)
+        ce = ce * sample_weights
+    return mx.mean(ce)
+
+
+from mlx_vgg16 import VGG16Train
 
 def export_dream_npz(model, path: Path):
     data: Dict[str, np.ndarray] = {}
@@ -370,10 +611,29 @@ def export_dream_npz(model, path: Path):
         ]:
             dump_block(getattr(mdl, name), name)
 
+    def export_vgg16(mdl: VGG16Train):
+        conv_indices = [0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28]
+        for idx in conv_indices:
+            layer = mdl.layers[idx] # nn.Conv2d
+            w = to_numpy(layer.weight)
+            b = to_numpy(layer.bias)
+            # PyTorch style: features.{idx}.weight
+            # We need to transpose MLX [Out, H, W, In] -> PyTorch [Out, In, H, W]
+            # But wait, MLX Conv2d is [Out, H, W, In]
+            # The load_npz expects [Out, In, H, W] from PyTorch and transposes to MLX
+            # So here we should export in PyTorch format [Out, In, H, W] so it's compatible with other tools?
+            # OR should we export in MLX format?
+            # The other export functions here are doing `np.transpose(w, (0, 3, 1, 2))` which converts MLX to PyTorch.
+            # So we should do the same.
+            data[f"features.{idx}.weight"] = np.transpose(w, (0, 3, 1, 2))
+            data[f"features.{idx}.bias"] = b
+
     if isinstance(model, GoogLeNetTrain):
         export_googlenet(model)
     elif isinstance(model, InceptionV3Train):
         export_inception_v3(model)
+    elif isinstance(model, VGG16Train):
+        export_vgg16(model)
     else:
         raise ValueError(f"Dream export unsupported for model type {type(model)}")
 
@@ -426,6 +686,11 @@ def main():
     parser.add_argument("--label-key", default="label", help="Column containing class ids")
     parser.add_argument("--image-size", type=int, default=224, help="Resize square side (set 0 to keep native size)")
     parser.add_argument("--preserve-aspect", action="store_true", help="Letterbox to square instead of squashing")
+    parser.add_argument("--augment", action="store_true", help="Enable random flip/rotate/zoom/brightness augmentations on training images")
+    parser.add_argument("--aug-rotate", type=float, default=15.0, help="Max rotation (degrees) when --augment is set")
+    parser.add_argument("--aug-zoom", type=float, default=0.15, help="Zoom jitter fraction (e.g., 0.2 for ±20%) when --augment is set")
+    parser.add_argument("--aug-brightness", type=float, default=0.1, help="Brightness jitter fraction when --augment is set")
+    parser.add_argument("--no-aug-hflip", action="store_true", help="Disable random horizontal flips during --augment")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
@@ -434,6 +699,7 @@ def main():
     parser.add_argument("--weight-decay", type=float, default=0.0)
     parser.add_argument("--aux-weight", type=float, default=0.3)
     parser.add_argument("--no-aux", action="store_true", help="Disable auxiliary heads")
+    parser.add_argument("--delete-branches", action="store_true", help="Drop auxiliary branches completely")
     parser.add_argument("--fc-warmup-epochs", type=int, default=0, help="Train only fc+aux for N epochs")
     parser.add_argument("--stat-samples", type=int, default=2048, help="Samples for mean/std/color decorrelation (0=all)")
     parser.add_argument("--skip-color-decorrelation", action="store_true")
@@ -441,6 +707,57 @@ def main():
     parser.add_argument("--save-every", type=int, default=1, help="Epoch cadence for checkpoints")
     parser.add_argument("--export-dream", default=None, help="Path to write dream-ready npz (feature tower only)")
     parser.add_argument("--resume", default=None, help="Resume training from checkpoint npz")
+    parser.add_argument("--balance-classes", action="store_true", help="Weight loss by inverse class frequency")
+    parser.add_argument("--wandb-project", default=None, help="WandB project name to log metrics")
+    parser.add_argument("--pretrained", default="googlenet_mlx.npz", help="Path to pretrained feature weights (e.g. ImageNet)")
+    parser.add_argument("--freeze-to", choices=[
+        "none",
+        "conv1",
+        "conv2",
+        "conv3",
+        "inception3a",
+        "inception3b",
+        "inception4a",
+        "inception4b",
+        "inception4c",
+        "inception4d",
+        "inception4e",
+        "inception5a",
+        "inception5b",
+        # Inception V3 layers
+        "Conv2d_1a_3x3",
+        "Conv2d_2a_3x3",
+        "Conv2d_2b_3x3",
+        "Conv2d_3b_1x1",
+        "Conv2d_4a_3x3",
+        "Mixed_5b",
+        "Mixed_5c",
+        "Mixed_5d",
+        "Mixed_6a",
+        "Mixed_6b",
+        "Mixed_6c",
+        "Mixed_6d",
+        "Mixed_6e",
+        "Mixed_7a",
+        "Mixed_7b",
+        "Mixed_7c",
+        # VGG16 layers
+        "layers.0",
+        "layers.2",
+        "layers.5",
+        "layers.7",
+        "layers.10",
+        "layers.12",
+        "layers.14",
+        "layers.17",
+        "layers.19",
+        "layers.21",
+        "layers.24",
+        "layers.26",
+        "layers.28",
+    ], default="none", help="Freeze layers up to this block (inclusive)")
+    parser.add_argument("--freeze-aux1-to", choices=["none", "loss_conv", "loss_fc", "loss_classifier"], default="none")
+    parser.add_argument("--freeze-aux2-to", choices=["none", "loss_conv", "loss_fc", "loss_classifier"], default="none")
     args = parser.parse_args()
 
     random.seed(42)
@@ -448,6 +765,9 @@ def main():
     os.environ.setdefault("HF_DATASETS_CACHE", str((Path(".hf_cache")).resolve()))
 
     load_kwargs = {"data_dir": args.data_dir} if args.data_dir else {}
+
+    if args.wandb_project:
+        wandb.init(project=args.wandb_project, config=vars(args))
 
     def load_split(name: str):
         try:
@@ -495,6 +815,14 @@ def main():
             num_classes = int(max(train_ds[label_key])) + 1
             class_names = None
 
+    print(
+        f"Loaded dataset: {len(train_ds)} train / {len(val_ds) if val_ds else 0} val | num_classes={num_classes}"
+    )
+    class_weights_mx = None
+    if args.balance_classes and num_classes > 1:
+        weights_np = compute_class_weights(train_ds, label_key, num_classes)
+        class_weights_mx = mx.array(weights_np)
+
     resume_epoch = 0
     resume_meta = None
     resume_params = None
@@ -515,11 +843,21 @@ def main():
         raise ValueError(f"Unsupported model '{model_name}'. Available: {list(MODEL_CONFIG.keys())}")
     model_cfg = MODEL_CONFIG[model_name]
     model_cls = model_cfg["class"]
-    model = model_cls(num_classes=num_classes, aux_weight=args.aux_weight, use_aux=not args.no_aux)
+    use_aux = not (args.no_aux or args.delete_branches)
+    model = model_cls(num_classes=num_classes, aux_weight=args.aux_weight, use_aux=use_aux)
     if args.optimizer == "sgd":
         opt = optim.SGD(learning_rate=args.lr, momentum=args.momentum)
     else:
         opt = optim.Adam(learning_rate=args.lr)
+
+    if args.pretrained and not args.resume and Path(args.pretrained).exists():
+        print(f"Loading pretrained weights from {args.pretrained}...")
+        try:
+            model.load_npz(args.pretrained)
+            print("Pretrained weights loaded successfully (features only).")
+        except Exception as e:
+            print(f"Warning: Failed to load pretrained weights: {e}")
+            print("Continuing with random weights...")
 
     def numpy_to_mx(obj):
         if isinstance(obj, dict):
@@ -551,19 +889,65 @@ def main():
         if resume_meta.get("color_decorrelation") is not None:
             color_matrix = np.array(resume_meta["color_decorrelation"], dtype=np.float32)
 
-    base_frozen = model_cfg.get("freeze_prefixes", [])
+    fill_color = tuple(int(np.clip(round(float(c) * 255.0), 0, 255)) for c in mean)
+    aug_params = {
+        "rotate": args.aug_rotate,
+        "zoom": args.aug_zoom,
+        "brightness": args.aug_brightness,
+        "hflip": not args.no_aug_hflip,
+    }
+
+    base_frozen = list(model_cfg.get("freeze_prefixes", []))
     warmup_freeze = model_cfg.get("warmup_freeze_prefixes", base_frozen)
     train_only = model_cfg.get("warmup_trainable", [])
+
+    if model_name == "googlenet" and args.freeze_to != "none":
+        try:
+            idx = GOOGLENET_LAYER_ORDER.index(args.freeze_to)
+            base_frozen = GOOGLENET_LAYER_ORDER[: idx + 1]
+            warmup_freeze = base_frozen
+        except ValueError:
+            pass
+    
+    if model_name == "inception_v3" and args.freeze_to != "none":
+        try:
+            idx = INCEPTION_V3_LAYER_ORDER.index(args.freeze_to)
+            base_frozen = INCEPTION_V3_LAYER_ORDER[: idx + 1]
+            warmup_freeze = base_frozen
+        except ValueError:
+            pass
+
+    if model_name == "vgg16" and args.freeze_to != "none":
+        try:
+            idx = VGG16_LAYER_ORDER.index(args.freeze_to)
+            base_frozen = VGG16_LAYER_ORDER[: idx + 1]
+            warmup_freeze = base_frozen
+        except ValueError:
+            pass
+
+    if model_name == "mobilenet" and args.freeze_to != "none":
+        try:
+            idx = MOBILENET_LAYER_ORDER.index(args.freeze_to)
+            base_frozen = MOBILENET_LAYER_ORDER[: idx + 1]
+            warmup_freeze = base_frozen
+        except ValueError:
+            pass
+
+    if model_name == "googlenet" and not args.delete_branches:
+        if args.freeze_aux1_to != "none":
+            base_frozen += aux_prefixes(1, args.freeze_aux1_to)
+        if args.freeze_aux2_to != "none":
+            base_frozen += aux_prefixes(2, args.freeze_aux2_to)
     ckpt_dir = Path(args.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     def loss_fn(mdl, x, y):
         logits, a1, a2 = mdl.forward_logits(x, train=True)
-        loss = mx.mean(nn.losses.cross_entropy(logits, y))
+        loss = weighted_cross_entropy(logits, y, class_weights_mx)
         if a1 is not None:
-            loss = loss + args.aux_weight * mx.mean(nn.losses.cross_entropy(a1, y))
+            loss = loss + args.aux_weight * weighted_cross_entropy(a1, y, class_weights_mx)
         if a2 is not None:
-            loss = loss + args.aux_weight * mx.mean(nn.losses.cross_entropy(a2, y))
+            loss = loss + args.aux_weight * weighted_cross_entropy(a2, y, class_weights_mx)
         return loss
 
     def add_weight_decay(grads, params, wd):
@@ -578,6 +962,7 @@ def main():
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
 
     for epoch in range(resume_epoch + 1, args.epochs + 1):
+        start_time = time.time() # Start timer for the epoch
         warmup = epoch <= args.fc_warmup_epochs and args.fc_warmup_epochs > 0
         frozen = build_freeze_prefixes(base_frozen, warmup_freeze, train_only if warmup else None)
 
@@ -593,6 +978,9 @@ def main():
             args.batch_size,
             shuffle=True,
             preserve_aspect=args.preserve_aspect,
+            augment=args.augment,
+            aug_params=aug_params if args.augment else None,
+            fill_color=fill_color,
         ):
             images = mx.array(images_np)
             labels = mx.array(labels_np)
@@ -621,15 +1009,17 @@ def main():
                 args.batch_size,
                 shuffle=False,
                 preserve_aspect=args.preserve_aspect,
+                augment=False,
+                fill_color=fill_color,
             ):
                 images = mx.array(images_np)
                 labels = mx.array(labels_np)
                 logits, a1, a2 = model.forward_logits(images, train=False)
-                loss = mx.mean(nn.losses.cross_entropy(logits, labels))
+                loss = weighted_cross_entropy(logits, labels, class_weights_mx)
                 if a1 is not None:
-                    loss = loss + args.aux_weight * mx.mean(nn.losses.cross_entropy(a1, labels))
+                    loss = loss + args.aux_weight * weighted_cross_entropy(a1, labels, class_weights_mx)
                 if a2 is not None:
-                    loss = loss + args.aux_weight * mx.mean(nn.losses.cross_entropy(a2, labels))
+                    loss = loss + args.aux_weight * weighted_cross_entropy(a2, labels, class_weights_mx)
                 val_losses.append(float(loss))
                 val_accs.append(float(accuracy_from_logits(logits, labels)))
             avg_val_loss = float(np.mean(val_losses))
@@ -638,12 +1028,25 @@ def main():
             avg_val_loss = None
             avg_val_acc = None
 
+        epoch_time = time.time() - start_time # Calculate elapsed time
         print(
-            f"[epoch {epoch:03d}] train_loss={avg_train_loss:.4f} "
+            f"[epoch {epoch:03d}] time={epoch_time:.2f}s | train_loss={avg_train_loss:.4f} "
             f"train_acc={avg_train_acc:.4f} "
             + (f"val_loss={avg_val_loss:.4f} val_acc={avg_val_acc:.4f}" if avg_val_loss is not None else "")
             + (f" warmup_fc_only={warmup}" if warmup else "")
         )
+
+        if args.wandb_project:
+            metrics = {
+                "epoch": epoch,
+                "time": epoch_time,
+                "train_loss": avg_train_loss,
+                "train_acc": avg_train_acc,
+            }
+            if avg_val_loss is not None:
+                metrics["val_loss"] = avg_val_loss
+                metrics["val_acc"] = avg_val_acc
+            wandb.log(metrics)
 
         if epoch % args.save_every == 0 or epoch == args.epochs:
             meta = {

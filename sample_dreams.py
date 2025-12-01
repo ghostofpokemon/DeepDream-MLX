@@ -6,197 +6,38 @@ Subsequent runs randomize key hyperparameters. Outputs land in ./tmp by default.
 """
 
 import argparse
-import random
 import subprocess
 import time
 from pathlib import Path
 
-import numpy as np
+from dream_params import (
+    MODEL_CONFIG,
+    DEFAULT_INPUT,
+    resolve_dream_script,
+    ensure_dream_ready_npz,
+    random_params,
+    apply_overrides,
+)
+from image_utils import create_comparison_image
 
 
-MODEL_CONFIG = {
-    "inception_v3": {
-        "weights": "models/inception_v3_epoch012.npz",
-        "hero": {
-            "layers": ["Mixed_5d", "Mixed_6b", "Mixed_7b"],
-            "steps": 80,
-            "lr": 0.18,
-            "octaves": 4,
-            "scale": 1.55,
-            "jitter": 40,
-            "smoothing": 0.45,
-        },
-        "layer_pool": [
-            "Conv2d_2b_3x3",
-            "Conv2d_3b_1x1",
-            "Mixed_5b",
-            "Mixed_5c",
-            "Mixed_5d",
-            "Mixed_6a",
-            "Mixed_6b",
-            "Mixed_6c",
-            "Mixed_6d",
-            "Mixed_6e",
-            "Mixed_7a",
-            "Mixed_7b",
-            "Mixed_7c",
-        ],
-        "classic_layers": [
-            ["Mixed_5c", "Mixed_5d", "Mixed_6b"],
-            ["Mixed_6b", "Mixed_6c"],
-            ["Mixed_6e", "Mixed_7b"],
-            ["Mixed_5d", "Mixed_6e", "Mixed_7c"],
-        ],
-        "classic_ranges": {
-            "steps": (48, 96),
-            "lr": (0.12, 0.22),
-            "octaves": (4, 6),
-            "scale": (1.35, 1.6),
-            "jitter": (28, 48),
-            "smoothing": (0.35, 0.55),
-        },
-    },
-    "googlenet": {
-        "weights": "models/googlenet_mlx.npz",
-        "hero": {
-            "layers": ["inception3b", "inception4c", "inception4d"],
-            "steps": 64,
-            "lr": 0.2,
-            "octaves": 4,
-            "scale": 1.45,
-            "jitter": 32,
-            "smoothing": 0.5,
-        },
-        "layer_pool": [
-            "inception3a",
-            "inception3b",
-            "inception4a",
-            "inception4b",
-            "inception4c",
-            "inception4d",
-            "inception4e",
-            "inception5a",
-            "inception5b",
-        ],
-        "classic_layers": [
-            ["inception3b", "inception4d"],
-            ["inception4c", "inception4d", "inception5a"],
-            ["inception4b", "inception4e"],
-        ],
-        "classic_ranges": {
-            "steps": (48, 96),
-            "lr": (0.12, 0.24),
-            "octaves": (4, 6),
-            "scale": (1.35, 1.6),
-            "jitter": (24, 48),
-            "smoothing": (0.4, 0.6),
-        },
-    },
-    "vgg16": {
-        "weights": "models/vgg16_mlx.npz",
-        "hero": {
-            "layers": ["relu4_3"],
-            "steps": 80,
-            "lr": 0.1,
-            "octaves": 4,
-            "scale": 1.6,
-            "jitter": 24,
-            "smoothing": 0.45,
-        },
-        "layer_pool": [
-            "relu3_3",
-            "relu4_1",
-            "relu4_2",
-            "relu4_3",
-            "relu5_1",
-            "relu5_2",
-            "relu5_3",
-        ],
-        "classic_layers": [
-            ["relu4_2"],
-            ["relu4_3"],
-            ["relu4_3", "relu5_1"],
-        ],
-        "classic_ranges": {
-            "steps": (60, 110),
-            "lr": (0.08, 0.14),
-            "octaves": (4, 6),
-            "scale": (1.4, 1.65),
-            "jitter": (16, 36),
-            "smoothing": (0.4, 0.55),
-        },
-    },
-    "mobilenet": {
-        "weights": "models/MobileNetV3_mlx.npz",
-        "hero": {
-            "layers": ["layer7", "layer9", "layer11"],
-            "steps": 72,
-            "lr": 0.18,
-            "octaves": 4,
-            "scale": 1.45,
-            "jitter": 28,
-            "smoothing": 0.45,
-        },
-        "layer_pool": [
-            "layer0",
-            "layer1",
-            "layer2",
-            "layer3",
-            "layer4",
-            "layer5",
-            "layer6",
-            "layer7",
-            "layer8",
-            "layer9",
-            "layer10",
-            "layer11",
-        ],
-        "classic_layers": [
-            ["layer6", "layer8"],
-            ["layer7", "layer9"],
-            ["layer8", "layer10", "layer11"],
-        ],
-        "classic_ranges": {
-            "steps": (50, 90),
-            "lr": (0.12, 0.22),
-            "octaves": (3, 5),
-            "scale": (1.3, 1.55),
-            "jitter": (20, 40),
-            "smoothing": (0.35, 0.55),
-        },
-    },
-}
-
-
-def resolve_dream_script(path_override: str | None) -> Path:
-    if path_override:
-        return Path(path_override).resolve()
-    this_dir = Path(__file__).resolve().parent
-    candidates = [
-        this_dir / "dream.py",
-        this_dir / "dream_mlx.py",
-        this_dir.parent / "dream.py",
-        this_dir.parent / "dream_mlx.py",
-    ]
-    for cand in candidates:
-        if cand.exists():
-            return cand
-    raise FileNotFoundError("dream_mlx.py not found; use --dream-script to point to it")
-
-
-def ensure_dream_ready_npz(path: Path):
-    with np.load(path, allow_pickle=True) as data:
-        if "params" in data.files:
-            raise ValueError(
-                f"{path} looks like a training checkpoint (contains 'params'). "
-                "Use the exported dream npz from train_dream.py or convert the checkpoint first."
-            )
-
-
-def run_dream(args, dream_script: Path, layers, steps, lr, octaves, scale, jitter, smoothing, suffix):
+def run_dream(
+    args,
+    dream_script: Path,
+    layers,
+    steps,
+    lr,
+    octaves,
+    scale,
+    jitter,
+    smoothing,
+    suffix,
+    weights,
+    timestamp: str | None = None,
+):
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    timestamp = timestamp or time.strftime("%Y%m%d-%H%M%S")
     out_path = output_dir / f"{Path(args.input).stem}_{args.model}_{suffix}_{timestamp}.jpg"
 
     cmd = [
@@ -223,64 +64,81 @@ def run_dream(args, dream_script: Path, layers, steps, lr, octaves, scale, jitte
         "--smoothing_coefficient",
         f"{smoothing:.3f}",
         "--weights",
-        args.weights,
+        weights,
         "--layers",
         *layers,
     ]
 
     print("\n>>>", " ".join(cmd))
     subprocess.run(cmd, check=True)
+    return out_path
 
 
-def uniform_range(lo, hi):
-    return random.uniform(lo, hi)
-
-
-def random_params(layer_pool, base_width: int, classic: bool, classic_layers=None, classic_ranges=None, min_dim: float = 120.0):
-    for _ in range(100):
-        if classic and classic_layers:
-            layers = random.choice(classic_layers)
-        else:
-            layer_count = random.randint(1, min(3, len(layer_pool)))
-            layers = random.sample(layer_pool, k=layer_count)
-
-        if classic and classic_ranges:
-            oct_lo, oct_hi = classic_ranges.get("octaves", (3, 5))
-            sc_lo, sc_hi = classic_ranges.get("scale", (1.25, 1.65))
-            octaves = random.randint(int(oct_lo), int(oct_hi))
-            scale = uniform_range(sc_lo, sc_hi)
-        else:
-            octaves = random.randint(2, 5)
-            scale = random.uniform(1.2, 1.65)
-        smallest = base_width / (scale ** (octaves - 1))
-        if smallest < min_dim:
-            continue
-        if classic and classic_ranges:
-            steps = random.randint(*classic_ranges.get("steps", (40, 90)))
-            lr = uniform_range(*classic_ranges.get("lr", (0.08, 0.2)))
-            jitter = random.randint(*classic_ranges.get("jitter", (24, 48)))
-            smoothing = uniform_range(*classic_ranges.get("smoothing", (0.4, 0.6)))
-        else:
-            steps = random.randint(12, 48)
-            lr = random.uniform(0.03, 0.22)
-            jitter = random.randint(16, 64)
-            smoothing = random.uniform(0.2, 0.8)
-        params = {
-            "layers": layers,
-            "steps": steps,
-            "lr": lr,
-            "octaves": octaves,
-            "scale": scale,
-            "jitter": jitter,
-            "smoothing": smoothing,
-        }
-        return params
-    raise RuntimeError("Failed to sample valid random hyperparameters; try reducing --count or adjusting min_dim")
+def run_with_optional_comparison(
+    args,
+    dream_script: Path,
+    layers,
+    steps,
+    lr,
+    octaves,
+    scale,
+    jitter,
+    smoothing,
+    suffix,
+):
+    if args.tuned:
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        base_out = run_dream(
+            args,
+            dream_script,
+            layers,
+            steps,
+            lr,
+            octaves,
+            scale,
+            jitter,
+            smoothing,
+            suffix=f"{suffix}_base",
+            weights=args.weights,
+            timestamp=timestamp,
+        )
+        tuned_out = run_dream(
+            args,
+            dream_script,
+            layers,
+            steps,
+            lr,
+            octaves,
+            scale,
+            jitter,
+            smoothing,
+            suffix=f"{suffix}_tuned",
+            weights=args.tuned,
+            timestamp=timestamp,
+        )
+        compare_name = f"{Path(args.input).stem}_{args.model}_{suffix}_compare_{timestamp}.jpg"
+        compare_path = Path(args.output_dir) / compare_name
+        create_comparison_image(base_out, tuned_out, compare_path)
+        print(f"Comparison saved to {compare_path}")
+    else:
+        run_dream(
+            args,
+            dream_script,
+            layers,
+            steps,
+            lr,
+            octaves,
+            scale,
+            jitter,
+            smoothing,
+            suffix=suffix,
+            weights=args.weights,
+        )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Batch DeepDream sampler with random params")
-    parser.add_argument("--input", default="input/love.jpg", help="Input image path")
+    parser.add_argument("--input", default=DEFAULT_INPUT, help="Input image path")
     parser.add_argument("--model", default="inception_v3", choices=list(MODEL_CONFIG.keys()), help="Model to use")
     parser.add_argument("--weights", help="Override weights path")
     parser.add_argument("--count", type=int, default=3, help="Number of random runs after the hero run")
@@ -288,6 +146,21 @@ def main():
     parser.add_argument("--output-dir", default="tmp", help="Directory where outputs go")
     parser.add_argument("--dream-script", help="Path to dream_mlx.py (auto-detects parent repo if omitted)")
     parser.add_argument("--classic", action="store_true", help="Bias random runs toward the classic 2015 DeepDream look")
+    parser.add_argument(
+        "--tuned",
+        help="Optional tuned/exported weights to generate side-by-side comparison outputs",
+    )
+    parser.add_argument("--layers", nargs="+", help="Override dream layers for hero/random runs")
+    parser.add_argument("--steps", type=int, help="Override dream steps")
+    parser.add_argument("--lr", type=float, help="Override learning rate")
+    parser.add_argument("--octaves", type=int, help="Override octave/pyramid count")
+    parser.add_argument("--scale", type=float, help="Override pyramid scaling factor")
+    parser.add_argument("--jitter", type=int, help="Override jitter pixels")
+    parser.add_argument(
+        "--smoothing",
+        type=float,
+        help="Override smoothing coefficient",
+    )
     args = parser.parse_args()
 
     cfg = MODEL_CONFIG[args.model]
@@ -299,9 +172,14 @@ def main():
     ensure_dream_ready_npz(weights_path)
     args.weights = str(weights_path)
 
-    hero = cfg["hero"]
+    if args.tuned:
+        tuned_path = Path(args.tuned).resolve()
+        ensure_dream_ready_npz(tuned_path)
+        args.tuned = str(tuned_path)
+
+    hero = apply_overrides(cfg["hero"], args)
     print("Running hero preset...")
-    run_dream(
+    run_with_optional_comparison(
         args,
         dream_script,
         hero["layers"],
@@ -322,8 +200,9 @@ def main():
             classic_layers=cfg.get("classic_layers"),
             classic_ranges=cfg.get("classic_ranges"),
         )
+        params = apply_overrides(params, args)
         print(f"Random run {idx + 1}/{args.count}: {params}")
-        run_dream(
+        run_with_optional_comparison(
             args,
             dream_script,
             params["layers"],

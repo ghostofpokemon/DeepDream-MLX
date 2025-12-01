@@ -1,5 +1,7 @@
 # DeepDream MLX: Agents
 
+> **Environment Reminder (for agents):** use the `llama310` conda python (`/opt/homebrew/anaconda3/envs/llama310/bin/python3`) when running scripts yourself; user commands stay as plain `python`.
+
 ## 1. The Mission
 To resurrect the 2015 DeepDream aesthetic using modern 2025 Apple Silicon hardware, bypassing the need for archaic frameworks like Caffe or Torch7 by porting everything to native MLX.
 
@@ -63,12 +65,15 @@ Goal: migrate ProGamerGov's `dream-creator` (PyTorch) workflow into this MLX rep
 
 **Plan:**
 1.  **Inventory parity:** list dream-creator's components (trainer, dataset tools, visualization scripts) and map them to current MLX equivalents.
-2.  **Port trainer knobs:** expose classic flags (`-freeze_to`, `-balance_classes`, CSV logging) in MLX, either via compatibility wrapper or `MODEL_CONFIG` extensions.
-3.  **Rebuild utilities:** re-implement key dataset scripts (`remove_bad`, `resize_data`, `calc_ms`, `calc_cm`) in MLX/Python so the workflow matches dream-creator’s prep steps.
-4.  **Visualization:** MLX-ify `vis.py / vis_multi.py` features (FFT decorrelation, tiling) or ensure `dream.py/sample_dreams.py` cover the same ground.
-5.  **Integration:** package the ported modules alongside existing MLX tooling so future users—and the parent app—can switch between “classic” dream-creator commands and the new trainer seamlessly.
+2.  **Shared core in place:** `dream_core.py` now houses the model registry, weight resolution, preprocessing, and `run_dream()`. Both `dream.py` and any external callers should import this instead of duplicating logic.
+3.  **Port trainer knobs:** expose classic flags (`-freeze_to`, `-balance_classes`, CSV logging) in MLX, either via compatibility wrapper or `MODEL_CONFIG` extensions.
+4.  **Rebuild utilities:** re-implement key dataset scripts (`remove_bad`, `resize_data`, `calc_ms`, `calc_cm`) in MLX/Python so the workflow matches dream-creator’s prep steps.
+5.  **Visualization:** MLX-ify `vis.py / vis_multi.py` features (FFT decorrelation, tiling) or ensure `dream.py/sample_dreams.py` cover the same ground.
+6.  **Integration:** package the ported modules alongside existing MLX tooling so future users—and the parent app—can switch between “classic” dream-creator commands and the new trainer seamlessly. App (`../dream_mlx.py`) should import `dream_core.run_dream` once the shared module proves out.
 
 Document progress + any divergences here before resetting context so agents stay aligned.
 
 ---
 *Docs derived from deep analysis of `dream-creator` and classic Caffe workflows.*
+
+> **Environment Reminder (for agents):** same deal—agents use the `llama310` python under the hood, users invoke `python`.
