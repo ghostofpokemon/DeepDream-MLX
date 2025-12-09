@@ -135,7 +135,7 @@ def dream_and_show(arch, weights_path):
         model = entry["cls"]()
         model.load_npz(weights_path)
         
-        img_np = load_image(test_img, width=256) # Small for speed
+        img_np = load_image(test_img, target_width=256) # Small for speed
         
         # Quick Dream (1 Octave, 2 Steps)
         dreamed, _ = run_dream(
