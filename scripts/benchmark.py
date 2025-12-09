@@ -1,16 +1,27 @@
-#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 import argparse
-import os
+# import os # moved
 import subprocess
 import time
 from datetime import datetime
+from dream_params import (
+    MODELS,
+    PRECISIONS,
+    INPUT_IMAGE,
+    OUTPUT_DIR,
+    STEPS,
+    WIDTH,
+    ensure_asset,
+    get_weight_file,
+)
 import json
 
 # Benchmark Configuration
-MODELS = ["googlenet", "vgg16", "resnet50"] # vgg19 often similar to vgg16, skipping for speed unless requested
-PRECISIONS = ["int8", "bf16", "float32"]
-INPUT_IMAGE = "assets/demo_googlenet.jpg" # Use a standard asset if available, or fallback
-OUTPUT_DIR = "benchmark_results"
 
 def ensure_asset():
     """Ensures a test image exists."""

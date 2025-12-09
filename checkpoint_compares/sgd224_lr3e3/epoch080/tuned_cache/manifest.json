@@ -1,3 +1,0 @@
-{
-  "{\"input\": \"/Users/mystic/Programs/deepdream/deepdream-mlx-models/love.jpg\", \"jitter\": 24, \"layers\": [\"relu4_3\"], \"lr\": 0.1, \"model\": \"vgg16\", \"octaves\": 4, \"scale\": 1.6, \"smoothing\": 0.45, \"steps\": 80, \"weights\": \"/Users/mystic/Programs/deepdream/deepdream-mlx-models/exports/vgg16_evangelion_sgd224_lr3e3.npz\", \"width\": 400}": "love_vgg16_relu4_3_s80lr0.1o4sc1.6_hero_tuned.jpg"
-}

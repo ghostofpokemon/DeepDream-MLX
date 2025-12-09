@@ -21,46 +21,110 @@ pipeline_tag: image-to-image
 
 DeepDream-MLX brings the original psychedelic computer vision look to Apple Silicon using [MLX](https://github.com/ml-explore/mlx). No Caffe relics—just clean tensor ops, ready-to-go checkpoints, and a zoom-video pipeline.
 
-## What You Get
+# DeepDreaming on Apple Silicon with MLX
 
-- MLX checkpoints for GoogLeNet (Inception v1), VGG16/VGG19, ResNet50, AlexNet, plus Places365 + bf16 variants (all `.npz`, tracked with LFS).
-- `dream.py`: full DeepDream CLI with presets (`--preset nb14/nb20/nb28`), guided dreaming (`--guide`), and `--model all` for side-by-side runs.
-- `dream_video.py`: zoom feedback loop using `scipy.ndimage.zoom`, outputs frames for `ffmpeg`.
-- `convert.py`: scan or download `.pth`/`.t7` checkpoints and convert them into MLX format while keeping `toConvert/` clean.
-- `benchmark.py` + `quantize_experiment.py`: quick speed checks and quantization experiments on Apple GPUs.
+![DeepDream Banner](assets/tmp_banner/love_googlenet_hero_20251129-161215.jpg)
 
-## Install
+**A high-performance, aesthetically pleasing implementation of DeepDream for Mac (M1/M2/M3).**
 
-Bring your own env (conda/uv/venv/none) as you prefer:
+This repo has been ruthlessly cleaned to provide a pure, "viral-ready" experience.
+
+## ✨ Features
+
+*   **⚡ Native MLX**: Optimized for Apple Silicon. Dreams generated in seconds.
+*   **🎨 TrueColor TUI**: A beautiful terminal interface with 24-bit half-block image rendering.
+*   **👁️ ASCII Inspection**: Visualize neural network architectures directly in your terminal.
+*   **📽️ Video Dreams**: Create zooming hallucinations with `scripts/dream_video.py`.
+*   **📦 Unified Models**: Supports VGG16, VGG19, ResNet50, GoogLeNet, MobileNetV3, DenseNet121, and EfficientNetB0.
+
+## 🏛️ The Family Tree
+
+How the models relate (Ascii Visualization):
+
+```text
+       [ IMAGE NET ANCESTORS ]
+               │
+          ┌────┴────┐
+      [AlexNet]   [VGG] ───────┐
+       (2012)    (2014)        │
+         │         │       [ResNet]
+         │         │        (2015)
+    [GoogLeNet]    │           │
+   (Inception)     │           │
+         │         └───────────┤
+    [InceptionV3]          [DenseNet]
+         │                   (2017)
+         │
+   [MobileNet] ── [EfficientNet]
+```
+
+*   **VGG**: The "Painter". Thick, heavy layers. Great for artistic style transfer.
+*   **GoogLeNet**: The "Psychedelic". Branching Inception modules create intricate, eyes-everywhere patterns.
+*   **ResNet**: The "Structure". Residual connections enforce geometry and depth.
+*   **DenseNet**: The "Connector". Feature reuse creates dense, rich textures.
+
+## 🚀 Quick Start
+
+### 1. Installation
 
 ```bash
-# using uv (optional)
-uv pip install -r requirements.txt
+# Clone
+git clone https://github.com/NickMystic/DeepDream-MLX.git
+cd DeepDream-MLX
 
-# or plain pip
+# Install Dependencies
 pip install -r requirements.txt
 ```
 
-## Run a Dream
+### 2. Get Models
+
+The repo comes with a handy converter tool.
 
 ```bash
-# Classic look (GoogLeNet, default layers inception3b/4c/4d)
-python dream.py --input assets/demo_googlenet.jpg --output dream.jpg \
-  --model googlenet --octaves 4 --scale 1.4 --steps 16
-
-# Painterly textures (VGG16) with a preset
-python dream.py --input assets/demo_vgg16.jpg --output dream_vgg16.jpg \
-  --model vgg16 --preset nb20 --steps 20
-
-# Guided dreaming
-python dream.py --input assets/demo_vgg16.jpg --guide assets/demo_googlenet.jpg \
-  --model vgg16 --layers relu4_3 --steps 18 --octaves 4
-
-# Compare everything in one go
-python dream.py --input assets/demo_vgg19.jpg --model all
+# Download & Convert specific model (e.g., DenseNet121)
+python convert.py --download densenet121 --dest models
 ```
 
-Default layers per model: VGG16 `relu4_3`, VGG19 `relu4_4`, ResNet50 `layer4_2`, AlexNet `relu5`, GoogLeNet `inception3b/4c/4d`. Override with `--layers layer1 layer2 ...` as needed.
+### 3. Dream
+
+**CLI Mode:**
+
+```bash
+python dream.py --input love.jpg --model densenet121 --output dream.jpg
+```
+
+**TUI Mode (Recommended):**
+
+```bash
+python tui.py
+```
+
+## 🛠️ Advanced Tools (`scripts/`)
+
+We have moved power tools to the `scripts/` directory:
+
+*   `scripts/inspect_model.py`: Visualize layer headers.
+*   `scripts/dream_video.py`: Generate zoom videos.
+*   `scripts/benchmark.py`: Compare model speeds.
+*   `scripts/train_dream.py`: Fine-tune models for custom aesthetics.
+
+## 📂 Project Structure
+
+```
+DeepDream-MLX/
+├── deepdream/       # Core package (Models, Logic)
+├── scripts/         # Power tools & Benchmarks
+├── models/          # Local MLX weights (Not in Git)
+├── assets/          # Input images
+├── convert.py       # Weights converter
+├── dream.py         # CLI Dreamer
+├── tui.py           # Terminal User Interface
+└── README.md
+```
+
+## 📜 License
+
+Apache 2.0. Dream responsibly.
 
 ## Weights (local + optional Hugging Face)
 
