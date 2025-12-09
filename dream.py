@@ -6,7 +6,7 @@ from datetime import datetime
 
 from PIL import Image
 
-from dream_core import list_models, load_image, run_dream
+from deepdream import list_models, load_image, run_dream
 
 
 def parse_args():
@@ -112,7 +112,10 @@ def run_dream_for_model(model_name, args, img_np):
     print(f"Layers: {meta['layers']} | Weights: {meta['weights']}\n")
 
 
+from deepdream.visualization import print_header
+
 def main():
+    print_header("DEEP DREAM MLX")
     args = parse_args()
     img_np = load_image(args.input, args.width)
 

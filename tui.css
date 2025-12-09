@@ -1,0 +1,405 @@
+
+Screen {
+    layout: vertical;
+    background: #2e382e; /* Charcoal */
+    color: #fcd3de;       /* Pink */
+    text-style: bold;
+}
+
+Header {
+    height: 3;
+    background: #50c9ce; /* Cyan */
+    color: #2e382e;      /* Charcoal */
+    text-align: center;
+    text-style: bold;
+}
+
+Footer {
+    height: 1;
+    background: #9883e5; /* Purple */
+    color: #2e382e;      /* Charcoal */
+    text-align: center;
+    text-style: bold;
+}
+
+#main-content-area {
+    layout: grid;
+    grid-columns: 1fr 2.5fr 1.5fr;
+    grid-gutter: 1;
+    height: 1fr;
+    width: 100%;
+    background: #2e382e;
+}
+
+#left-pane, #right-pane, #center-pane {
+    height: 100%;
+    padding: 1;
+    layout: vertical;
+    border: double #50c9ce; /* Cyan Double Border */
+    background: #2e382e;
+}
+
+#right-pane > Horizontal {
+    height: 30%;
+    margin-bottom: 1;
+}
+
+#right-pane > Horizontal > Vertical {
+    width: 50%;
+    height: 100%;
+    border: ascii #72a1e5; /* Blue */
+    padding: 0 1;
+    background: #2e382e;
+}
+
+#tree-view, #output-tree {
+    height: 30%;
+    width: 100%;
+    margin-bottom: 1;
+    border: round #72a1e5; /* Blue */
+    background: #2e382e;
+}
+
+#history-table {
+    height: 30%;
+    margin-bottom: 1;
+    border: heavy #9883e5; /* Purple */
+    background: #2e382e;
+}
+
+#center-pane {
+    border: heavy #fcd3de; /* Pink Border for Main Stage */
+}
+
+#preview-row {
+    height: 1fr;
+}
+
+#input-preview-container, #output-preview-container {
+    width: 50%;
+    height: 1fr;
+    padding: 1;
+    background: #000000;
+    border: double #50c9ce;
+}
+
+#input-preview, #output-preview {
+    width: 100%;
+    height: 1fr;
+    content-align: center middle;
+    background: #000000;
+    color: #fcd3de;
+}
+
+#status-strip {
+    height: 3;
+    margin-top: 1;
+    padding: 0 1;
+    background: #232b23; /* Darker Charcoal */
+    color: #50c9ce;
+    border: hkey #72a1e5;
+    content-align: left middle;
+}
+
+#input-preview-header, #output-preview-header {
+    margin-bottom: 1;
+    color: #9883e5;
+    text-style: bold;
+}
+
+#log {
+    height: 8;
+    border: heavy #50c9ce;
+    background: #232b23;
+    color: #fcd3de;
+    margin-top: 0;
+}
+
+.header-text {
+    text-style: bold;
+    margin-left: 1;
+    color: #9883e5; /* Purple */
+    margin-bottom: 1;
+}
+
+#preset-details-container {
+    height: 1fr;
+    margin-top: 1;
+    padding: 1;
+    border: round #72a1e5;
+    layout: vertical;
+    overflow-y: auto;
+    background: #2e382e;
+}
+
+#preset-details-placeholder {
+    width: 100%;
+    height: 100%;
+    content-align: center middle;
+    color: #72a1e5;
+}
+
+Input {
+    margin-bottom: 1;
+    background: #232b23;
+    color: #50c9ce;
+    border: bottom #72a1e5;
+    padding: 0 1;
+}
+
+Label {
+    margin-bottom: 0;
+    text-style: bold;
+    color: #9883e5;
+}
+
+Button {
+    width: 100%;
+    margin-bottom: 1;
+    background: #2e382e;
+    color: #50c9ce;
+    border: double #50c9ce;
+    text-style: bold;
+}
+
+Button:hover {
+    background: #50c9ce;
+    color: #2e382e;
+    border: double #fcd3de;
+}
+
+RadioSet {
+    border: none;
+    background: #2e382e;
+    padding: 0;
+}
+
+RadioButton {
+    color: #72a1e5;
+}
+
+RadioButton.-on {
+    color: #fcd3de;
+    text-style: bold underline;
+}
+
+#run-button-container {
+    layout: horizontal;
+    align: center middle;
+    height: auto;
+    border: heavy #fcd3de;
+    padding: 1;
+    margin-top: 1;
+    background: #2e382e;
+}
+
+Header {
+    height: 3; /* Explicit height for header */
+    background: #FF00FF;
+    color: #0D0221;
+    text-align: center;
+    text-style: bold italic;
+}
+
+Footer {
+    height: 1; /* Explicit height for footer */
+    background: #00FFFF;
+    color: #0D0221;
+    text-align: center;
+    text-style: bold italic;
+}
+
+#main-content-area { /* This is the new Container that holds the 3 panes */
+    layout: grid;
+    grid-columns: 1fr 2.5fr 1.5fr; /* Left, Center, Right panes */
+    grid-gutter: 2;
+    height: 1fr; /* Takes up remaining vertical space */
+    width: 100%;
+    background: #0D0221; /* Match screen background */
+}
+
+#left-pane, #right-pane, #center-pane {
+    height: 100%; /* Fill the grid cell */
+    padding: 1;
+    layout: vertical;
+    border: hkey #FF00FF;
+    background: #1A0A33;
+}
+
+#right-pane > Horizontal {
+    height: 30%;
+    margin-bottom: 2;
+}
+
+#right-pane > Horizontal > Vertical {
+    width: 50%;
+    height: 100%;
+    border: vkey #00FFFF;
+    padding: 1;
+    background: #1A0A33;
+}
+
+#tree-view {
+    height: 30%;
+    width: 100%;
+    margin-bottom: 2;
+    border: round #00FF00;
+}
+
+#output-tree {
+    height: 30%;
+    width: 100%;
+    margin-bottom: 2;
+    border: round #00FF00;
+}
+
+#history-table {
+    height: 30%;
+    margin-bottom: 2;
+    border: double #FFFF00;
+}
+
+#center-pane {
+    border: double #00FF00; /* Bright green border for the image */
+}
+
+#preview-row {
+    height: 1fr;
+}
+
+#input-preview-container, #output-preview-container {
+    width: 50%;
+    height: 1fr;
+    padding: 1;
+    background: #0D0221;
+    border: double #00FF00;
+}
+
+#input-preview, #output-preview {
+    width: 100%;
+    height: 1fr;
+    content-align: center middle;
+    background: #0D0221;
+    color: #00FFFF;
+}
+
+#status-strip {
+    height: 3;
+    margin-top: 1;
+    padding: 0 1;
+    background: #331A4D;
+    color: #00FFFF;
+    border: hkey #FF00FF;
+    content-align: left middle;
+}
+
+#input-preview-header, #output-preview-header {
+    margin-bottom: 1;
+    color: #00FFFF;
+    text-style: bold;
+}
+
+#log {
+    height: 5; /* Explicit height for log */
+    border: ascii #FF0000;
+    background: #1A0A33;
+    color: #FF0000;
+    margin-top: 1;
+}
+
+.header-container {
+    layout: horizontal;
+    align: center middle;
+    height: auto;
+    margin-bottom: 1;
+    background: #331A4D;
+    color: #00FFFF;
+    padding: 0 1;
+    border-bottom: heavy #FF00FF;
+}
+
+.header-text {
+    text-style: bold;
+    margin-left: 1;
+    color: #00FFFF;
+}
+
+#preset-details-container {
+    height: 1fr; /* Take remaining vertical space */
+    margin-top: 2;
+    padding: 1;
+    border: round #00FF00;
+    layout: vertical;
+    overflow-y: auto;
+    background: #1A0A33;
+}
+
+#preset-details-placeholder {
+    width: 100%;
+    height: 100%;
+    content-align: center middle;
+    color: #FF00FF;
+}
+
+Input {
+    margin-bottom: 1;
+    background: #0D0221;
+    color: #FFFF00;
+    border: hkey #00FFFF;
+    padding: 0 1;
+}
+
+Label {
+    margin-bottom: 1;
+    text-style: bold;
+    color: #FF00FF;
+}
+
+Button {
+    width: 100%;
+    margin-bottom: 1;
+    background: #331A4D;
+    color: #00FF00;
+    border: double #FFFF00;
+    text-style: bold;
+}
+
+Button:hover {
+    background: #FF00FF;
+    color: #0D0221;
+    border: double #00FFFF;
+}
+
+RadioSet {
+    border: double #00FF00;
+    background: #1A0A33;
+    padding: 1;
+}
+
+RadioButton {
+    color: #00FFFF;
+}
+
+RadioButton.-on {
+    color: #FFFF00;
+}
+
+#run-button-container {
+    layout: horizontal;
+    align: center middle;
+    height: auto;
+    border: double #FF00FF;
+    padding: 1;
+    margin-top: 2;
+    background: #331A4D;
+}
+
+#run-button-container > SvgStatic {
+    margin-right: 1;
+}
+
+SvgStatic {
+    width: auto;
+    height: 1;
+    color: #00FF00;
+}

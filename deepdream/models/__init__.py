@@ -1,6 +1,8 @@
 from .alexnet import AlexNet
 from .googlenet import GoogLeNet
 from .inception_v3 import InceptionV3
+from .efficientnet import EfficientNetB0
+from .densenet import DenseNet121
 from .mobilenet import MobileNetV3Small_Defined
 from .resnet50 import ResNet50
 from .vgg16 import VGG16
@@ -14,4 +16,5 @@ __all__ = [
     "ResNet50",
     "VGG16",
     "VGG19",
+    "EfficientNetB0",
 ]

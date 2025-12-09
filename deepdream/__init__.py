@@ -16,16 +16,18 @@ except ImportError:  # pragma: no cover - optional dependency
     hf_hub_download = None
 
 try:
-    from models import AlexNet
+    from .models import AlexNet
 except ImportError:
     AlexNet = None
 
-from models import GoogLeNet
-from models import InceptionV3
-from models import MobileNetV3Small_Defined
-from models import ResNet50
-from models import VGG16
-from models import VGG19
+from .models import GoogLeNet
+from .models import InceptionV3
+from .models import MobileNetV3Small_Defined
+from .models import ResNet50
+from .models import VGG16
+from .models import VGG19
+from .models import EfficientNetB0
+from .models import DenseNet121
 
 IMAGENET_MEAN = mx.array([0.485, 0.456, 0.406])
 IMAGENET_STD = mx.array([0.229, 0.224, 0.225])
@@ -109,6 +111,20 @@ MODEL_REGISTRY = {
         "cls": MobileNetV3Small_Defined,
         "default_layers": ["layer7", "layer9", "layer11"],
         "weights_key": "MobileNetV3",
+        "supports_presets": False,
+        "min_size": 32,
+    },
+    "efficientnet_b0": {
+        "cls": EfficientNetB0,
+        "default_layers": ["block_7", "block_14"], # features.4 and features.6
+        "weights_key": "efficientnet_b0",
+        "supports_presets": False,
+        "min_size": 32,
+    },
+    "densenet121": {
+        "cls": DenseNet121,
+        "default_layers": ["denseblock3", "denseblock4"], # Deeper features
+        "weights_key": "densenet121",
         "supports_presets": False,
         "min_size": 32,
     },

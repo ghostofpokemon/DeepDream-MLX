@@ -6,12 +6,8 @@ import numpy as np
 import mlx.core as mx
 import scipy.ndimage as nd
 from PIL import Image
-from dream import deepdream, load_image, deprocess, get_weights_path
-from mlx_googlenet import GoogLeNet
-from mlx_resnet50 import ResNet50
-from mlx_vgg16 import VGG16
-from mlx_vgg19 import VGG19
-from mlx_alexnet import AlexNet
+from deepdream import deepdream, load_image, get_weights_path, MODEL_REGISTRY
+# Models are loaded via MODEL_REGISTRY from deepdream package
 
 def run_video_dream(args):
     print(f"--- DeepDream Video Generator ---")

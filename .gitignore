@@ -16,6 +16,9 @@ tmp/
 *.t7
 *.caffemodel
 *.ckpt
+*.npz
+models/*.npz
+models/*.pth
 
 # Ignore contents of toConvert but keep the folder
 toConvert/*
