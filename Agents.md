@@ -1,6 +1,6 @@
 # DeepDream MLX: Agents
 
-> **Environment Reminder (for agents):** use the `llama310` conda python (`/opt/homebrew/anaconda3/envs/llama310/bin/python3`) when running scripts yourself; user commands stay as plain `python`.
+> **Agents: Do not run `python3 …` from the default interpreter. Always shell into `llama310` and run `python …` so numpy/MLX are available. User instructions remain plain `python`.
 
 ## 1. The Mission
 To resurrect the 2015 DeepDream aesthetic using modern 2025 Apple Silicon hardware, bypassing the need for archaic frameworks like Caffe or Torch7 by porting everything to native MLX.

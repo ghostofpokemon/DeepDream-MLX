@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Utility helpers for dream output post-processing."""
 
+import base64
+import sys
 from pathlib import Path
 from typing import Union
 
-from PIL import Image
+from PIL import Image, ImageFile
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 PathLike = Union[str, Path]
 
@@ -26,3 +30,12 @@ def create_comparison_image(base_path: PathLike, tuned_path: PathLike, compare_p
         comparison.paste(img2, (img1.width, 0))
         comparison.save(compare_path)
     return compare_path
+
+
+def show_inline(path: PathLike, width: int = 800):
+    path = Path(path)
+    data = path.read_bytes()
+    b64 = base64.b64encode(data).decode()
+    sys.stdout.write(
+        f"\033]1337;File=inline=1;width={width}px;height=auto;preserveAspectRatio=1;name={path.name}:{b64}\a\n"
+    )

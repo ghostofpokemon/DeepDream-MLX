@@ -16,9 +16,12 @@ import argparse
 import json
 import os
 import random
+import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-import time
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -411,6 +414,9 @@ def compute_class_weights(train_ds, label_key: str, num_classes: int) -> np.ndar
     counts[counts == 0] = 1.0
     total = counts.sum()
     weights = total / (num_classes * counts)
+    # Clamp extremes so rare classes don't explode gradients, then normalize mean to 1.
+    weights = np.clip(weights, 0.2, 5.0)
+    weights = weights / np.mean(weights)
     return weights.astype(np.float32)
 
 
@@ -675,6 +681,126 @@ def build_freeze_prefixes(always_frozen: List[str], warmup_freeze: Optional[List
     return [p for p in base if p not in trainable_only]
 
 
+RAINBOW_COLORS = [
+    "\033[38;5;196m",
+    "\033[38;5;202m",
+    "\033[38;5;226m",
+    "\033[38;5;46m",
+    "\033[38;5;21m",
+    "\033[38;5;93m",
+    "\033[38;5;201m",
+]
+
+
+def rainbow_text(text: str) -> str:
+    return "".join(RAINBOW_COLORS[i % len(RAINBOW_COLORS)] + ch for i, ch in enumerate(text)) + "\033[0m"
+
+
+def prompt_for_pretrained(reason: str) -> Optional[Path]:
+    prompt = (
+        f"{rainbow_text(reason)}\n"
+        "[1] Enter path to pretrained weights\n"
+        "[2] YOLO: continue from random weights\n"
+        "[3] Abort this training run\n> "
+    )
+    while True:
+        try:
+            choice = input(prompt).strip().lower()
+        except EOFError:
+            choice = "3"
+        if choice in ("1", "y", "yes"):
+            path = input("Enter pretrained path: ").strip()
+            if not path:
+                continue
+            candidate = Path(path).expanduser().resolve()
+            if candidate.exists():
+                return candidate
+            print(rainbow_text(f"No file at {candidate}. Try again."))
+        elif choice in ("2", "n", "no"):
+            print(rainbow_text("Proceeding from thin air. You monster."))
+            return None
+        elif choice in ("3", "q", "quit", "exit", ""):
+            print(rainbow_text("Bailing out. Come back when you're prepared."))
+            sys.exit(1)
+        else:
+            print(rainbow_text("Pick 1, 2, or 3, you chaos gremlin."))
+
+
+def run_checkpoint_compare(args, epoch: int, final: bool):
+    if not args.compare_input or not args.export_dream:
+        return
+    base_weights = args.compare_base_weights or args.pretrained
+    if not base_weights:
+        return
+    compare_script = Path(__file__).resolve().parent / "compare_dreams.py"
+    if not compare_script.exists():
+        print("compare_dreams.py not found; skipping checkpoint compare.")
+        return
+
+    base_weights_path = Path(base_weights).expanduser().resolve()
+    if not base_weights_path.exists():
+        print(f"Compare base weights missing: {base_weights_path}; skipping checkpoint compare.")
+        return
+
+    tuned_weights_path = Path(args.export_dream).expanduser().resolve()
+    input_path = Path(args.compare_input).expanduser().resolve()
+    if not input_path.exists():
+        print(f"Compare input missing: {input_path}; skipping checkpoint compare.")
+        return
+
+    output_dir = Path(args.compare_output_dir).expanduser().resolve() / f"epoch{epoch:03d}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "python",
+        str(compare_script),
+        "--model",
+        args.model,
+        "--base",
+        str(base_weights_path),
+        "--tuned",
+        str(tuned_weights_path),
+        "--input",
+        str(input_path),
+        "--width",
+        str(args.compare_width),
+        "--count",
+        "0",
+        "--output-dir",
+        str(output_dir),
+    ]
+
+    if args.compare_dream_script:
+        cmd += ["--dream-script", args.compare_dream_script]
+    overrides = [
+        ("--layers", args.compare_layers),
+        ("--steps", args.compare_steps),
+        ("--lr", args.compare_lr),
+        ("--octaves", args.compare_octaves),
+        ("--scale", args.compare_scale),
+        ("--jitter", args.compare_jitter),
+        ("--smoothing", args.compare_smoothing),
+    ]
+    for flag, value in overrides:
+        if value is None:
+            continue
+        if isinstance(value, list):
+            cmd += [flag] + [str(v) for v in value]
+        else:
+            cmd += [flag, str(value)]
+
+    print("[checkpoint compare]", " ".join(cmd))
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        print(f"Checkpoint compare failed: {exc}")
+    # else:
+    #     if not final and not args.compare_keep_history:
+    #         shutil.rmtree(output_dir, ignore_errors=True)
+
+
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune MLX models for DeepDream")
     parser.add_argument("--model", choices=list(MODEL_CONFIG.keys()), default="googlenet", help="Model architecture to fine-tune.")
@@ -704,7 +830,7 @@ def main():
     parser.add_argument("--stat-samples", type=int, default=2048, help="Samples for mean/std/color decorrelation (0=all)")
     parser.add_argument("--skip-color-decorrelation", action="store_true")
     parser.add_argument("--checkpoint-dir", default="checkpoints", help="Where to write checkpoints")
-    parser.add_argument("--save-every", type=int, default=1, help="Epoch cadence for checkpoints")
+    parser.add_argument("--save-every", type=int, default=10, help="Epoch cadence for checkpoints")
     parser.add_argument("--export-dream", default=None, help="Path to write dream-ready npz (feature tower only)")
     parser.add_argument("--resume", default=None, help="Resume training from checkpoint npz")
     parser.add_argument("--balance-classes", action="store_true", help="Weight loss by inverse class frequency")
@@ -758,6 +884,20 @@ def main():
     ], default="none", help="Freeze layers up to this block (inclusive)")
     parser.add_argument("--freeze-aux1-to", choices=["none", "loss_conv", "loss_fc", "loss_classifier"], default="none")
     parser.add_argument("--freeze-aux2-to", choices=["none", "loss_conv", "loss_fc", "loss_classifier"], default="none")
+    parser.add_argument("--compare-input", help="Run a checkpoint comparison dream on this image after every export")
+    parser.add_argument("--compare-width", type=int, default=400, help="Width used for checkpoint compare dreams")
+    parser.add_argument("--compare-layers", nargs="+", help="Layers to use for checkpoint compare dreams")
+    parser.add_argument("--compare-steps", type=int)
+    parser.add_argument("--compare-lr", type=float)
+    parser.add_argument("--compare-octaves", type=int)
+    parser.add_argument("--compare-scale", type=float)
+    parser.add_argument("--compare-jitter", type=int)
+    parser.add_argument("--compare-smoothing", type=float)
+    parser.add_argument("--compare-output-dir", default="checkpoint_compares", help="Where checkpoint compare images go")
+    parser.add_argument("--compare-base-weights", help="Override base weights for checkpoint compares (defaults to --pretrained)")
+    parser.add_argument("--compare-dream-script", help="Custom dream.py path for checkpoint compares")
+    parser.add_argument("--compare-keep-history", action="store_true", help="Keep every compare result instead of deleting intermediate ones")
+    parser.add_argument("--max-checkpoints", type=int, default=5, help="Keep only the last N checkpoints (0=keep all)")
     args = parser.parse_args()
 
     random.seed(42)
@@ -768,6 +908,15 @@ def main():
 
     if args.wandb_project:
         wandb.init(project=args.wandb_project, config=vars(args))
+
+    export_path = None
+    if args.export_dream:
+        export_path = Path(args.export_dream).resolve()
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        args.export_dream = str(export_path)
+
+    # Track saved checkpoints for rotation
+    saved_checkpoints = []
 
     def load_split(name: str):
         try:
@@ -850,14 +999,28 @@ def main():
     else:
         opt = optim.Adam(learning_rate=args.lr)
 
-    if args.pretrained and not args.resume and Path(args.pretrained).exists():
-        print(f"Loading pretrained weights from {args.pretrained}...")
-        try:
-            model.load_npz(args.pretrained)
+    pretrained_path = None
+    if not args.resume:
+        if not args.pretrained:
+            reason = "HOW THE FUCK ARE YOU GOING TO FINE-TUNE SOMETHING WHEN YOU DON'T EVEN HAVE A (tuned) MODEL ? RETARD"
+            pretrained_path = prompt_for_pretrained(reason)
+        else:
+            candidate = Path(args.pretrained).expanduser().resolve()
+            if candidate.exists():
+                pretrained_path = candidate
+            else:
+                reason = f"HOW THE FUCK ARE YOU GOING TO FINE-TUNE SOMETHING WHEN {candidate} DOESN'T EVEN FUCKING EXIST?"
+                pretrained_path = prompt_for_pretrained(reason)
+        if pretrained_path is None:
+            print(rainbow_text("No pretrained weights selected. Initializing from random."))
+        else:
+            args.pretrained = str(pretrained_path)
+            print(f"Loading pretrained weights from {pretrained_path}...")
+            try:
+                model.load_npz(str(pretrained_path))
+            except Exception as e:
+                raise RuntimeError(f"Failed to load pretrained weights {pretrained_path}: {e}")
             print("Pretrained weights loaded successfully (features only).")
-        except Exception as e:
-            print(f"Warning: Failed to load pretrained weights: {e}")
-            print("Continuing with random weights...")
 
     def numpy_to_mx(obj):
         if isinstance(obj, dict):
@@ -941,6 +1104,7 @@ def main():
     ckpt_dir = Path(args.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
+
     def loss_fn(mdl, x, y):
         logits, a1, a2 = mdl.forward_logits(x, train=True)
         loss = weighted_cross_entropy(logits, y, class_weights_mx)
@@ -960,6 +1124,9 @@ def main():
         return grads + params * wd
 
     loss_and_grad_fn = nn.value_and_grad(model, loss_fn)
+
+    # Initialize training history locally
+    history = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
 
     for epoch in range(resume_epoch + 1, args.epochs + 1):
         start_time = time.time() # Start timer for the epoch
@@ -1036,6 +1203,48 @@ def main():
             + (f" warmup_fc_only={warmup}" if warmup else "")
         )
 
+        # --- PLOTTING ---
+        try:
+            import matplotlib.pyplot as plt
+            
+            history['loss'].append(avg_train_loss)
+            history['accuracy'].append(avg_train_acc)
+            if val_ds:
+                history['val_loss'].append(avg_val_loss)
+                history['val_accuracy'].append(avg_val_acc)
+            
+            # Plot Loss
+            plt.figure(figsize=(10, 6))
+            plt.plot(history['loss'], label='train loss')
+            if val_ds:
+                plt.plot(history['val_loss'], label='val loss')
+            plt.title(f'Model Loss (Epoch {epoch})')
+            plt.ylabel('Loss')
+            plt.xlabel('Epoch')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(ckpt_dir / 'LossVal_loss.png')
+            plt.close()
+
+            # Plot Accuracy
+            plt.figure(figsize=(10, 6))
+            plt.plot(history['accuracy'], label='train acc')
+            if val_ds:
+                plt.plot(history['val_accuracy'], label='val acc')
+            plt.title(f'Model Accuracy (Epoch {epoch})')
+            plt.ylabel('Accuracy')
+            plt.xlabel('Epoch')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(ckpt_dir / 'AccVal_acc.png')
+            plt.close()
+            
+        except ImportError:
+            pass # Matplotlib not installed
+        except Exception as e:
+            print(f"Plotting failed: {e}")
+        # ----------------
+
         if args.wandb_project:
             metrics = {
                 "epoch": epoch,
@@ -1048,7 +1257,8 @@ def main():
                 metrics["val_acc"] = avg_val_acc
             wandb.log(metrics)
 
-        if epoch % args.save_every == 0 or epoch == args.epochs:
+        save_now = epoch % args.save_every == 0 or epoch == args.epochs
+        if save_now:
             meta = {
                 "epoch": epoch,
                 "model": model_name,
@@ -1069,14 +1279,25 @@ def main():
             ckpt_path = ckpt_dir / f"{model_name}_epoch{epoch:03d}.npz"
             save_checkpoint(model, opt.state, meta, ckpt_path)
             if args.export_dream:
-                export_path = Path(args.export_dream)
-                export_path.parent.mkdir(parents=True, exist_ok=True)
-                export_dream_npz(model, export_path)
-                meta_path = export_path.with_suffix(".json")
+                export_dream_npz(model, Path(args.export_dream))
+                meta_path = Path(args.export_dream).with_suffix(".json")
                 with open(meta_path, "w") as f:
                     json.dump(meta, f, indent=2)
-                print(f"Saved dream export to {export_path} (+ {meta_path})")
+                print(f"Saved dream export to {args.export_dream} (+ {meta_path})")
             print(f"Saved checkpoint to {ckpt_path}")
+            
+            # Checkpoint rotation
+            saved_checkpoints.append(ckpt_path)
+            if args.max_checkpoints > 0 and len(saved_checkpoints) > args.max_checkpoints:
+                oldest = saved_checkpoints.pop(0)
+                try:
+                    if oldest.exists():
+                        oldest.unlink()
+                        print(f"Deleted old checkpoint {oldest.name} (max_checkpoints={args.max_checkpoints})")
+                except Exception as e:
+                    print(f"Failed to delete old checkpoint {oldest}: {e}")
+
+            run_checkpoint_compare(args, epoch, final=(epoch == args.epochs))
 
 
 if __name__ == "__main__":

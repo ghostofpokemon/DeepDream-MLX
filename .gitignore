@@ -39,3 +39,5 @@ checkpoints*
 wandb
 assets/.DS_Store
 assets/tmp_banner/
+
+deepdream-mlx-models/

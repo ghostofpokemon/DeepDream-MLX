@@ -15,13 +15,17 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     hf_hub_download = None
 
-from mlx_alexnet import AlexNet
-from mlx_googlenet import GoogLeNet
-from mlx_inception_v3 import InceptionV3
-from mlx_mobilenet import MobileNetV3Small_Defined
-from mlx_resnet50 import ResNet50
-from mlx_vgg16 import VGG16
-from mlx_vgg19 import VGG19
+try:
+    from models import AlexNet
+except ImportError:
+    AlexNet = None
+
+from models import GoogLeNet
+from models import InceptionV3
+from models import MobileNetV3Small_Defined
+from models import ResNet50
+from models import VGG16
+from models import VGG19
 
 IMAGENET_MEAN = mx.array([0.485, 0.456, 0.406])
 IMAGENET_STD = mx.array([0.229, 0.224, 0.225])
@@ -64,44 +68,60 @@ MODEL_REGISTRY = {
         "default_layers": ["relu4_3"],
         "weights_key": "vgg16",
         "supports_presets": True,
+        "min_size": 32,
     },
     "vgg19": {
         "cls": VGG19,
         "default_layers": ["relu4_4"],
         "weights_key": "vgg19",
         "supports_presets": True,
+        "min_size": 32,
     },
     "resnet50": {
         "cls": ResNet50,
         "default_layers": ["layer4_2"],
         "weights_key": "resnet50",
         "supports_presets": False,
-    },
-    "alexnet": {
-        "cls": AlexNet,
-        "default_layers": ["relu5"],
-        "weights_key": "alexnet",
-        "supports_presets": False,
+        "min_size": 64,
     },
     "googlenet": {
         "cls": GoogLeNet,
         "default_layers": ["inception3b", "inception4c", "inception4d"],
         "weights_key": "googlenet",
         "supports_presets": False,
+        "min_size": 32,
     },
     "inception_v3": {
         "cls": InceptionV3,
         "default_layers": ["Mixed_5d", "Mixed_6e", "Mixed_7c"],
         "weights_key": "inception_v3",
         "supports_presets": False,
+        "min_size": 120,
     },
     "mobilenet_v3": {
         "cls": MobileNetV3Small_Defined,
         "default_layers": ["layer7", "layer9", "layer11"],
         "weights_key": "MobileNetV3",
         "supports_presets": False,
+        "min_size": 32,
+    },
+    "mobilenet": {
+        "cls": MobileNetV3Small_Defined,
+        "default_layers": ["layer7", "layer9", "layer11"],
+        "weights_key": "MobileNetV3",
+        "supports_presets": False,
+        "min_size": 32,
     },
 }
+
+if AlexNet is not None:
+    MODEL_REGISTRY["alexnet"] = {
+        "cls": AlexNet,
+        "default_layers": ["relu5"],
+        "weights_key": "alexnet",
+        "supports_presets": False,
+        "min_size": 64,
+    }
 
 
 def list_models() -> List[str]:
@@ -173,14 +193,20 @@ def smooth_gradients(grad: mx.array, sigma: float, fixed_radius: Optional[int] =
     return out / len(smoothed)
 
 
-def get_pyramid_shapes(base_shape: Tuple[int, int], num_octaves: int, scale: float) -> List[Tuple[int, int]]:
+def get_pyramid_shapes(base_shape: Tuple[int, int], num_octaves: int, scale: float, min_size: int = 0) -> List[Tuple[int, int]]:
     h, w = base_shape
     shapes = []
     for level in range(num_octaves):
         exponent = level - num_octaves + 1
         nh = max(1, int(round(h * (scale**exponent))))
         nw = max(1, int(round(w * (scale**exponent))))
-        shapes.append((nh, nw))
+        if nh >= min_size and nw >= min_size:
+            shapes.append((nh, nw))
+    
+    if not shapes:
+        # Always include at least the original size if everything was filtered out
+        shapes.append((h, w))
+        
     return shapes
 
 
@@ -195,10 +221,11 @@ def deepdream(
     jitter: int,
     smoothing: float,
     guide_img_np: Optional[np.ndarray] = None,
+    min_size: int = 0,
 ) -> np.ndarray:
     img = preprocess(img_np)
     base_h, base_w = img.shape[1:3]
-    pyramid_shapes = get_pyramid_shapes((base_h, base_w), num_octaves, scale)
+    pyramid_shapes = get_pyramid_shapes((base_h, base_w), num_octaves, scale, min_size=min_size)
 
     for nh, nw in pyramid_shapes:
         img = resize_bilinear(img, nh, nw)
@@ -249,6 +276,8 @@ def get_weights_path(weights_key: str, explicit_path: Optional[str], logger: Opt
     else:
         candidates.append(f"{weights_key}_mlx.npz")
         candidates.append(f"{weights_key}_mlx_bf16.npz")
+        candidates.append(f"models/{weights_key}_mlx.npz")
+        candidates.append(f"models/{weights_key}_mlx_bf16.npz")
 
     for path in candidates:
         if os.path.exists(path):
@@ -324,6 +353,8 @@ def run_dream(
 
     model = info["cls"]()
     model.load_npz(weights_path)
+    
+    min_size = info.get("min_size", 0)
 
     dreamed = deepdream(
         model,
@@ -336,6 +367,7 @@ def run_dream(
         jitter=effective_jitter,
         smoothing=effective_smoothing,
         guide_img_np=guide_image_np,
+        min_size=min_size,
     )
 
     meta = {
@@ -351,4 +383,6 @@ __all__ = [
     "list_models",
     "load_image",
     "run_dream",
+    "deepdream",
+    "get_weights_path",
 ]
