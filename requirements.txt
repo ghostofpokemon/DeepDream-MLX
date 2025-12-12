@@ -9,3 +9,4 @@ textual
 rich
 timm
 nicegui
+requests
