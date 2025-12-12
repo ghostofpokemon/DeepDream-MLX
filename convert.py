@@ -18,8 +18,10 @@ from torch.hub import download_url_to_file
 try:
     import mlx.core as mx
     import mlx.utils
+    import mlx.utils
     from deepdream import MODEL_REGISTRY
     from deepdream.visualization import traverse_model, print_header, print_footer
+    from deepdream.term_image import print_image
     VIZ_AVAILABLE = True
 except ImportError as e:
     VIZ_AVAILABLE = False
@@ -31,14 +33,22 @@ try:
 except ImportError:
     torchfile = None
 
+try:
+    import timm
+except ImportError:
+    timm = None
+
 # --- Configuration ---
+HF_BASE = "https://huggingface.co/nickmystic/DeepDream-MLX/resolve/main/models"
+# Map architecture names to their hosted filename.
+# If values are None, we assume f"{arch}_mlx.npz"
 PLACES365_URLS = {
-    "alexnet": "http://places2.csail.mit.edu/models_places365/alexnet_places365.pth.tar",
-    "resnet50": "http://places2.csail.mit.edu/models_places365/resnet50_places365.pth.tar",
-    "vgg16": "http://places2.csail.mit.edu/models_places365/vgg16_places365.pth.tar",
-    "googlenet": "http://places2.csail.mit.edu/models_places365/googlenet_places365.pth.tar",
-    "efficientnet_b0": "https://download.pytorch.org/models/efficientnet_b0_rwightman-3dd342df.pth",
-    "densenet121": "https://download.pytorch.org/models/densenet121-a639ec97.pth"
+    "alexnet": f"{HF_BASE}/alexnet_mlx.npz",
+    "resnet50": f"{HF_BASE}/resnet50_mlx.npz",
+    "vgg16": f"{HF_BASE}/vgg16_mlx.npz",
+    "googlenet": f"{HF_BASE}/googlenet_mlx.npz",
+    "efficientnet_b0": f"{HF_BASE}/efficientnet_b0_mlx.npz",
+    "densenet121": f"{HF_BASE}/densenet121_mlx.npz"
 }
 
 # --- Helper Functions ---
@@ -155,6 +165,11 @@ def dream_and_show(arch, weights_path):
         print(render_image_to_string(tmp_out, width=60))
         print(f"   (Test Dream Generated: {tmp_out})")
         
+        # Inline Image
+        try:
+             print_image(tmp_out)
+        except: pass
+        
         # Cleanup
         os.remove(tmp_out)
 
@@ -235,74 +250,70 @@ def download_and_convert(arch, download_dir, target_dir):
         print(f"No URL for {arch}")
         return
 
-    filename = os.path.join(download_dir, os.path.basename(url))
+    filename = os.path.join(target_dir, os.path.basename(url))
     
-    # 1. Download
-    if not os.path.exists(filename):
-        print(f"Downloading {arch} from {url}...")
-        try:
-            download_url_to_file(url, filename)
-        except Exception as e:
-            print(f"Download failed: {e}")
+    # 1. Check if already exists
+    if os.path.exists(filename):
+        print(f"Found existing {filename}")
+        return
+
+    # 2. Download
+    print(f"Downloading {arch} from {url}...")
+    try:
+        download_url_to_file(url, filename)
+        print(f"✅ Downloaded {filename}")
+        
+        # If it's an NPZ, we are done (pre-converted)
+        if filename.endswith(".npz"):
+            size_mb = os.path.getsize(filename) / (1024*1024)
+            print(f"   (Size: {size_mb:.1f} MB)")
+            # Optional: Visualize
+            visualize_conversion(arch, filename)
+            # dream_and_show(arch, filename) # Optional
             return
-    else:
-        print(f"Found cached {filename}")
 
-    # 2. Convert based on type
-    if arch in ["efficientnet_b0", "densenet121"]:
-        # Direct state dict conversion
+    except Exception as e:
+        print(f"Download failed: {e}")
+        return
+
+    # Fallback to conversion if we somehow downloaded a non-npz (legacy support)
+    # This block is only reached if we changed the URL back to a .pth file
+    if not filename.endswith(".npz"):
+        print(f"Detected non-npz file {filename}, attempting legacy conversion...")
+        # ... logic would go here, but strictly relying on NPZ for now ...
         convert_pytorch(filename, target_dir)
-        # Auto-Visualize
-        final_path = os.path.join(target_dir, f"{os.path.basename(filename).split('.')[0]}_mlx.npz")
-        # Fixing path logic: convert_pytorch saves to {name_base}_mlx.npz
-        # Using a consistent name construction would be better, but let's just reconstruct it:
-        base = os.path.splitext(os.path.basename(filename))[0]
-        if base.endswith(".pth"): base = base[:-4]
-        predicted_path = os.path.join(target_dir, f"{base}_mlx.npz")
-        
-        visualize_conversion(arch, predicted_path)
-        dream_and_show(arch, predicted_path)
-    else:
-        # Places365 Legacy path (requiring skeleton)
-        bs = os.path.splitext(os.path.basename(filename))[0]
-        # remove .pth if present in stem (for .pth.tar)
-        if bs.endswith(".pth"): bs = bs[:-4]
-        
-        final_out_path = os.path.join(target_dir, f"{bs}_mlx.npz")
-        if os.path.exists(final_out_path):
-             print(f"Skipping {arch}, {final_out_path} already exists.")
-             return
-
-        print(f"Loading {arch} into PyTorch structure...")
-        try:
-            model = get_places365_model_skeleton(arch)
-            checkpoint = torch.load(filename, map_location="cpu")
-            state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
-            
-            # Robust Load
-            new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-            try:
-                model.load_state_dict(new_state_dict, strict=True)
-            except:
-                model.load_state_dict(new_state_dict, strict=False)
-                
-            # 3. Export
-            model.eval()
-            final_dict = clean_state_dict(model.state_dict())
-            np.savez(final_out_path, **final_dict)
-            print(f"✅ Saved {final_out_path}")
-
-        except Exception as e:
-            print(f"Failed to process {arch}: {e}")
 
 # --- Main CLI ---
+
+def download_timm_weights(model_name, target_dir):
+    if timm is None:
+        print("❌ 'timm' library not installed. Run `pip install timm`.")
+        return
+
+    print(f"Downloading/Converting {model_name} from timm...")
+    try:
+        model = timm.create_model(model_name, pretrained=True)
+        model.eval()
+        state_dict = model.state_dict()
+        clean_dict = clean_state_dict(state_dict)
+        
+        out_path = os.path.join(target_dir, f"{model_name}_mlx.npz")
+        np.savez(out_path, **clean_dict)
+        
+        size_mb = os.path.getsize(out_path) / (1024*1024)
+        print(f"✅ Saved {out_path} ({size_mb:.1f} MB)")
+        
+        if model_name == "convnextv2_tiny":
+             visualize_conversion("convnext_tiny", out_path)
+
+    except Exception as e:
+        print(f"❌ Failed to process {model_name}: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="DeepDream-MLX Model Converter")
     parser.add_argument("--scan", default="toConvert", help="Directory to scan for local files")
-    parser.add_argument("--download", choices=["alexnet", "resnet50", "vgg16", "googlenet", "efficientnet_b0", "densenet121", "all"], 
-                        help="Download and convert specific models")
-    parser.add_argument("--dest", default=".", help="Output directory for .npz files")
+    parser.add_argument("--download", help="Download and convert specific models (supports timm models)")
+    parser.add_argument("--dest", default="models", help="Output directory for .npz files")
     args = parser.parse_args()
 
     if not os.path.exists(args.dest):
@@ -313,9 +324,23 @@ def main():
         if not os.path.exists(args.scan):
             os.makedirs(args.scan)
             
-        targets = ["alexnet", "resnet50", "vgg16", "googlenet", "efficientnet_b0", "densenet121"] if args.download == "all" else [args.download]
-        for t in targets:
-            download_and_convert(t, args.scan, args.dest)
+        # If it's a known non-timm model, use the old path
+        legacy_models = ["alexnet", "resnet50", "vgg16", "googlenet", "efficientnet_b0", "densenet121"]
+        
+        if args.download == "all":
+            targets = legacy_models + ["convnextv2_tiny"]
+            for t in targets:
+                if t == "convnextv2_tiny":
+                    download_timm_weights(t, args.dest)
+                else:
+                    download_and_convert(t, args.scan, args.dest)
+        else:
+            # Check if it's a legacy supported model
+            if args.download in legacy_models:
+                 download_and_convert(args.download, args.scan, args.dest)
+            else:
+                 # Assume it's a timm model (e.g. xception71, convnextv2_tiny, etc)
+                 download_timm_weights(args.download, args.dest)
 
     # 2. Handle Local Scan
     if os.path.exists(args.scan):

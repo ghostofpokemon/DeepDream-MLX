@@ -43,4 +43,19 @@ wandb
 assets/.DS_Store
 assets/tmp_banner/
 
+# Models (Large Files)
+*.npz
+*.pth
+*.t7
+/models/
 deepdream-mlx-models/
+
+# Web Client
+web_client/node_modules/
+web_client/.svelte-kit/
+web_client/build/
+web_client/.env
+.env
+.DS_Store
+treetime/
+legacy/

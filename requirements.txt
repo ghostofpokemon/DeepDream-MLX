@@ -5,3 +5,7 @@ scipy
 huggingface_hub
 datasets
 tqdm
+textual
+rich
+timm
+nicegui

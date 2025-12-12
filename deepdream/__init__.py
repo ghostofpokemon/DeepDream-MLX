@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from typing import Callable, Dict, List, Optional, Tuple
+import glob
 
 import mlx.core as mx
 import numpy as np
@@ -28,6 +29,7 @@ from .models import VGG16
 from .models import VGG19
 from .models import EfficientNetB0
 from .models import DenseNet121
+from .models import ConvNeXtV2
 
 IMAGENET_MEAN = mx.array([0.485, 0.456, 0.406])
 IMAGENET_STD = mx.array([0.229, 0.224, 0.225])
@@ -128,6 +130,13 @@ MODEL_REGISTRY = {
         "supports_presets": False,
         "min_size": 32,
     },
+    "convnext_tiny": {
+        "cls": ConvNeXtV2,
+        "default_layers": ["stages.2.blocks.5", "stages.2.blocks.8"],
+        "weights_key": "convnextv2_tiny",
+        "supports_presets": False,
+        "min_size": 32,
+    },
 }
 
 if AlexNet is not None:
@@ -141,7 +150,12 @@ if AlexNet is not None:
 
 
 def list_models() -> List[str]:
-    return sorted(MODEL_REGISTRY.keys())
+    registry_keys = set(MODEL_REGISTRY.keys())
+    # Scan for local weights in models/ and current dir
+    for f in glob.glob("models/*_mlx.npz") + glob.glob("*_mlx.npz"):
+        name = os.path.basename(f).replace("_mlx.npz", "")
+        registry_keys.add(name)
+    return sorted(registry_keys)
 
 
 def load_image(path: str, target_width: Optional[int] = None) -> np.ndarray:
@@ -340,7 +354,12 @@ def run_dream(
 ) -> Tuple[np.ndarray, Dict[str, str]]:
     name = model_name.lower()
     if name not in MODEL_REGISTRY:
-        raise ValueError(f"Unknown model '{model_name}'. Available: {', '.join(list_models())}")
+        # Check if it was scanned from disk
+        candidates = glob.glob(f"models/{name}_mlx.npz") + glob.glob(f"{name}_mlx.npz")
+        if candidates:
+             raise ValueError(f"Model '{model_name}' weights found at {candidates[0]}, but no MLX architecture class is registered for it in MODEL_REGISTRY. DeepDream-MLX requires an implementation (class) for each model architecture to define layers and forward passes.")
+        else:
+             raise ValueError(f"Unknown model '{model_name}'. Available: {', '.join(list_models())}")
 
     info = MODEL_REGISTRY[name]
     effective_layers = layers or info["default_layers"]

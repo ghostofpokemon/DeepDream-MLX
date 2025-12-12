@@ -1,129 +1,149 @@
+# Spud-OS Assets - Extracted from the Mogged Collection
+
+# Logo: The Ultimate Devo Mix
+LOGO_DEVO_MEGA = """
+[bold red]           ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+          ██[bold yellow]░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░[bold red]██
+         ██[bold yellow]░[bold red]███[bold yellow]╔══╗[bold red]███[bold yellow]╔══╗[bold red]███[bold yellow]╔╗╗[bold red]███[bold yellow]╔══╗[bold red]███[bold yellow]░[bold red]██
+        ██[bold yellow]░[bold red]████[bold yellow]║[bold magenta]D[bold yellow]║[bold red]████[bold yellow]║[bold magenta]E[bold yellow]║[bold red]████[bold yellow]║[bold magenta]V[bold yellow]║[bold red]████[bold yellow]║[bold magenta]O[bold yellow]║[bold red]████[bold yellow]░[bold red]██
+        ██[bold yellow]░[bold red]████[bold yellow]╚══╝[bold red]████[bold yellow]╚══╝[bold red]████[bold yellow]╚╝╝[bold red]████[bold yellow]╚══╝[bold red]████[bold yellow]░[bold red]██
+         ██[bold yellow]░[bold red]▀██[bold cyan]▓▓▓▓[bold red]██▀[bold cyan]▓▓▓▓[bold red]██▀[bold cyan]▓▓▓▓[bold red]██▀[bold cyan]▓▓▓▓[bold red]██▀[bold yellow]░[bold red]██
+          ██[bold yellow]░[bold cyan]▀▀▀▀[bold yellow]░░░[bold cyan]▀▀▀▀[bold yellow]░░░[bold cyan]▀▀▀▀[bold yellow]░░░[bold cyan]▀▀▀▀[bold yellow]░[bold red]██
+           ██[bold yellow]░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░[bold red]██
+            ▀██▄[bold yellow]░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░[bold red]▄██▀
+              ▀▀██████████████████████████████▀▀
+[bold yellow]     ╔═════════════════════════════════════════════╗
+     ║                                             ║
+     ║  [bold magenta]⚡⚡⚡ D E E P   D R E A M   M O D E ⚡⚡⚡[bold yellow]  ║
+     ║                                             ║
+     ║    [bold cyan]⟨⟨ QUANTUM POTATO PROCESSING ONLINE ⟩⟩[bold yellow]   ║
+     ║       [bold magenta]⟨ NEURAL TUBER NETWORK ACTIVE ⟩[bold yellow]       ║
+     ║                                             ║
+     ║         [bold orange3]~ SPUD-OS DEVO EDITION ~[bold yellow]          ║
+     ║                                             ║
+     ╚═════════════════════════════════════════════╝[/]
 """
-Console Art & Image Rendering Utilities.
-Supports TrueColor (Half-Block), iTerm2, and Imgcat protocols.
+
+# Spud Emotions
+SPUD_HAPPY = """
+[bold yellow]            ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄              [bold green]⟨ HAPPY SPUD ⟩[bold yellow]
+         ▄█[bold orange3]▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀[bold yellow]█▄
+       ▄█[bold orange3]▀   [bold magenta]◕[bold orange3]       [bold magenta]◕[bold orange3]   ▀[bold yellow]█▄         [bold green]✓ HUMAN DETECTED[bold yellow]
+      █[bold orange3]▀    [bold cyan]╔═════════╗[bold orange3]    ▀[bold yellow]█        [bold green]✓ VIBE: IMMACULATE[bold yellow]
+     █[bold orange3]▀     [bold cyan]║ [bold magenta]( ◕‿◕ )[bold cyan] ║[bold orange3]     ▀[bold yellow]█       [bold green]✓ READY TO ENGAGE[bold yellow]
+    █[bold orange3]▀      [bold cyan]╚═════════╝[bold orange3]      ▀[bold yellow]█
+    █[bold orange3]▀   [bold red]╱▔▔▔▔▔▔▔▔▔▔▔╲[bold orange3]   ▀[bold yellow]█      [bold magenta]⟨⟨CONSCIOUSNESS LEVEL⟩⟩[bold yellow]
+    █[bold orange3]▀  [bold red]▕  ▃▃▃▃▃▃▃▃▃  ▏[bold orange3]  ▀[bold yellow]█      [bold magenta]    ████████ 100%[bold yellow]
+     █[bold orange3]▀  [bold red]╲▁▁▁▁▁▁▁▁▁▁▁╱[bold orange3]  ▀[bold yellow]█
+      █[bold orange3]▀▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▀[bold yellow]█
+       ▀█[bold orange3]▄▄▄▄▄▄▄▄▄▄▄▄▄[bold yellow]█▀
+         ▀▀█████████▀▀[/]
 """
-import os
-import shutil
-import base64
-import subprocess
-from PIL import Image as PILImage
 
-def render_image_to_string(path: str, width: int = None, height: int = None) -> str:
-    """
-    Render an image to a string suitable for console display.
-    Prioritizes: imgcat > iTerm2 > TrueColor Half-Block.
-    """
-    # 1. Try imgcat (User Preference)
-    imgcat_out = _render_imgcat(path, width, height)
-    if imgcat_out:
-        return imgcat_out
+SPUD_THINKING = """
+[bold yellow]            ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄              [bold cyan]⟨ PROCESSING... ⟩[bold yellow]
+         ▄█[bold orange3]▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀[bold yellow]█▄
+       ▄█[bold orange3]▀   [bold magenta]◔[bold orange3]       [bold magenta]◔[bold orange3]   ▀[bold yellow]█▄         [bold orange3]⚙ COMPUTING...[bold yellow]
+      █[bold orange3]▀    [bold cyan]╔═════════╗[bold orange3]    ▀[bold yellow]█        [bold orange3]⚙ ANALYZING...[bold yellow]
+     █[bold orange3]▀     [bold cyan]║ [bold magenta](  -  - )[bold cyan] ║[bold orange3]     ▀[bold yellow]█       [bold orange3]⚙ DREAMING...[bold yellow]
+    █[bold orange3]▀      [bold cyan]╚═════════╝[bold orange3]      ▀[bold yellow]█
+    █[bold orange3]▀   [bold red]╱▔▔▔▔▔[bold white]?[bold red]▔▔▔▔▔╲[bold orange3]   ▀[bold yellow]█      [bold magenta]⟨⟨NEURAL ACTIVITY⟩⟩[bold yellow]
+    █[bold orange3]▀  [bold red]▕  [bold cyan]▂▃▄▅▆▇[bold yellow]█[bold cyan]▇▆▅▄▃▂  [bold red]▏[bold orange3]  ▀[bold yellow]█      [bold magenta]    ▓▓▓░░░░░ 42%[bold yellow]
+     █[bold orange3]▀  [bold red]╲▁▁▁▁▁▁▁▁▁▁▁╱[bold orange3]  ▀[bold yellow]█
+      █[bold orange3]▀▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▀[bold yellow]█
+       ▀█[bold orange3]▄▄▄▄▄▄▄▄▄▄▄▄▄[bold yellow]█▀
+         ▀▀█████████▀▀[/]
+"""
 
-    # 2. Try iTerm2 Native
-    if _is_iterm2():
-        iterm_out = _render_iterm2_native(path, width, height)
-        if iterm_out:
-            return iterm_out
+SPUD_DEVO = """
+[bold red]        ▄▄▄▄▄▄▄▄▄▄▄              [bold yellow]⟨ ENERGY DOME EQUIPPED ⟩[bold red]
+       ██[bold yellow]▀▀▀▀▀▀▀[bold red]██
+      ██[bold yellow]╔═══════╗[bold red]██            [bold yellow]🔻 DEVO MODE ACTIVE 🔻[bold red]
+      ██[bold yellow]║ENERGY ║[bold red]██
+      ██[bold yellow]║ DOME  ║[bold red]██            [bold cyan]⚡ DE-EVOLUTION IN PROGRESS[bold red]
+      ██[bold yellow]╚═══════╝[bold red]██
+       ▀▀▀▀[bold yellow]║[bold red]▀▀▀▀             [bold magenta]⟨⟨ ARE WE NOT MEN? ⟩⟩[bold red]
+[bold yellow]            ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄              [bold magenta]   WE ARE DEVO![bold yellow]
+         ▄█[bold orange3]▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀[bold yellow]█▄
+       ▄█[bold orange3]▀   [bold magenta]▲[bold orange3]       [bold magenta]▲[bold orange3]   ▀[bold yellow]█▄
+      █[bold orange3]▀    [bold cyan]╔═════════╗[bold orange3]    ▀[bold yellow]█
+     █[bold orange3]▀     [bold cyan]║ [bold magenta]( ◉_◉)[bold cyan] ║[bold orange3]     ▀[bold yellow]█
+    █[bold orange3]▀      [bold cyan]╚═════════╝[bold orange3]      ▀[bold yellow]█
+    █[bold orange3]▀   [bold red]╱▔▔▔▔▔▔▔▔▔▔▔╲[bold orange3]   ▀[bold yellow]█
+    █[bold orange3]▀  [bold red]▕  ▂▂▂▂▂▂▂▂▂  ▏[bold orange3]  ▀[bold yellow]█
+     █[bold orange3]▀  [bold red]╲▁▁▁▁▁▁▁▁▁▁▁╱[bold orange3]  ▀[bold yellow]█
+      █[bold orange3]▀▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▀[bold yellow]█
+       ▀█[bold orange3]▄▄▄▄▄▄▄▄▄▄▄▄▄[bold yellow]█▀
+         ▀▀█████████▀▀[/]
+"""
 
-    # 3. Fallback to TrueColor ASCII (The "Art")
-    return _render_halfblock(path, width)
+MODEL_ICON_ADVANCED = """
+[bold blue]         ╔══════════════════════════════════╗
+         ║ [bold yellow]⚡ M O D E L   C O R E   2.0 ⚡[bold blue] ║
+         ╚══════════════════════════════════╝
+              [bold magenta]▄▄▄▄▄           ▄▄▄▄▄
+             ██[bold cyan]╔═╗[bold magenta]██         ██[bold cyan]╔═╗[bold magenta]██
+             ██[bold cyan]║0║[bold magenta]██[bold yellow]═══[bold magenta]◆[bold yellow]═══[bold magenta]██[bold cyan]║1║[bold magenta]██
+             ██[bold cyan]╚═╝[bold magenta]██    [bold magenta]║[bold magenta]    ██[bold cyan]╚═╝[bold magenta]██
+              [bold cyan]▀▀[bold yellow]║[bold cyan]▀▀     [bold magenta]║[bold cyan]     ▀▀[bold yellow]║[bold cyan]▀▀
+    [bold orange3]╔═════════╗[bold yellow]║[bold orange3]╔═════[bold magenta]║[bold orange3]═════╗[bold yellow]║[bold orange3]╔═════════╗
+    ║ INPUT A ║[bold yellow]▼[bold orange3]║     [bold magenta]▼[bold orange3]     ║[bold yellow]▼[bold orange3]║ INPUT B ║
+    ╚═════════╝ ║   [bold magenta]╔═╩═╗[bold orange3]   ║ ╚═════════╝
+                [bold yellow]▼   [bold magenta]║MIX║[bold yellow]   ▼
+            [bold green]╔═══════[bold magenta]╚═╦═╝[bold green]═══════╗
+            ║                   ║
+            ║ [bold white]⟨⟨ D R E A M ⟩⟩[bold green]  ║
+            ║  [bold magenta]QUANTUM STATE:ON[bold green]  ║
+            ║  [bold cyan]LATENT SPACE:HOT[bold green]  ║
+            ║                   ║
+            ╚═════════[bold yellow]║[bold green]═════════╝
+                      [bold yellow]▼
+                  [bold magenta]╔═══════╗
+                  ║OUTPUT ║
+                  ╚═══════╝[/]
+"""
 
-def _is_iterm2() -> bool:
-    """Check if we're running in iTerm2 or compatible terminal."""
-    term_program = os.environ.get("TERM_PROGRAM", "")
-    term = os.environ.get("TERM", "")
-    return term_program == "iTerm.app" or "iterm" in term.lower()
+BOOT_SEQUENCE_ULTRA = [
+    "",
+    "[bold cyan]╔════════════════════════════════════════════════════════════╗[/]",
+    "[bold cyan]║                                                            ║[/]",
+    "[bold cyan]║  [bold yellow]⟨⟨⟨ Initializing Spud-OS v1.0 [bold magenta]⚡DEVO EDITION⚡[bold yellow] ⟩⟩⟩[bold cyan]  ║[/]",
+    "[bold cyan]║                                                            ║[/]",
+    "[bold cyan]╚════════════════════════════════════════════════════════════╝[/]",
+    "",
+    "[bold magenta]>>> [bold yellow]Loading De-Evolution Algorithms[bold green].......... [COMPLETE][/]",
+    "[bold magenta]    [bold orange3]↳ Mutation Rate: ∞[/]",
+    "[bold magenta]    [bold orange3]↳ Chaos Factor: MAXIMUM[/]",
+    "",
+    "[bold orange3]>>> [bold yellow]Calibrating Potato Logic[bold green]................ [COMPLETE][/]",
+    "[bold orange3]    [bold cyan]↳ Quantum Tubers: ONLINE[/]",
+    "[bold orange3]    [bold cyan]↳ Starch Levels: OPTIMAL[/]",
+    "",
+    "[bold red]>>> [bold yellow]Scanning Human Inputs[bold magenta].................. [DETECTED!][/]",
+    "[bold red]    [bold magenta]↳ Spud Sentience: AWAKENED[/]",
+    "[bold red]    [bold magenta]↳ Empathy Modules: ENGAGED[/]",
+    "",
+    "[bold green]>>> [bold yellow]Waking up the Models[bold magenta]................... [DREAMING][/]",
+    "[bold green]    [bold magenta]↳ Dream State: ACHIEVED[/]",
+    "[bold green]    [bold magenta]↳ Creativity Engine: FLOWING[/]",
+    "",
+    "[bold cyan]⟨⟨⟨ [bold yellow]Duty Now For The Future[bold magenta] ⚡JOCKO HOMO ACTIVATED⚡[bold cyan] ⟩⟩⟩[/]",
+    "",
+    "[bold red]╔═══════════════════════════════════════════════════════════╗[/]",
+    "[bold red]║                                                           ║[/]",
+    "[bold red]║ [bold green]STATUS: [bold yellow]MUTATION READY[bold magenta] ⚡ ARE WE NOT MEN?! WE ARE DEVO! ⚡[bold red] ║[/]",
+    "[bold red]║                                                           ║[/]",
+    "[bold red]╚═══════════════════════════════════════════════════════════╝[/]",
+    ""
+]
 
-def _render_iterm2_native(path: str, width: int = None, height: int = None) -> str | None:
-    """Render image using native iTerm2 inline image protocol."""
-    try:
-        with open(path, "rb") as image_file:
-            image_data = image_file.read()
-            encoded = base64.b64encode(image_data).decode('ascii')
-
-        # Default dimensions if not provided
-        w_str = f"{width}px" if width else "auto"
-        h_str = f"{height}px" if height else "auto"
-
-        # If width/height not specified, let terminal handle it or default to something sane?
-        # Textual passed specific widget sizes. Here we might want "auto" or "100%".
-        # For inline=1, width/height are optional.
-        
-        dims = ""
-        if width: dims += f";width={width}px"
-        if height: dims += f";height={height}px"
-
-        # iTerm2 inline image protocol
-        iterm_sequence = f"\033]1337;File=inline=1{dims}:{encoded}\a"
-        return iterm_sequence
-    except Exception:
-        return None
-
-def _render_imgcat(path: str, width: int = None, height: int = None) -> str | None:
-    """Render via imgcat (iTerm-compatible) if available."""
-    if not shutil.which("imgcat"):
-        return None
-    try:
-        cmd = ["imgcat"]
-        if width:
-            cmd.extend(["--width", str(width)])
-        if height:
-            cmd.extend(["--height", str(height)])
-        
-        cmd.append(path)
-
-        result = subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        )
-        return result.stdout.decode("utf-8", errors="ignore")
-    except Exception:
-        return None
-
-def _render_halfblock(path: str, target_width: int = None) -> str:
-    """Render high-quality TrueColor ASCII art (Half-Block)."""
-    try:
-        img = PILImage.open(path).convert("RGB")
-        
-        # Default width if not provided
-        if not target_width:
-            # Detect terminal size?
-            try:
-                term_w, _ = os.get_terminal_size()
-                target_width = min(term_w, 80) # Cap at 80 for sanity
-            except:
-                target_width = 60
-        
-        # Aspect ratio preservation
-        w, h = img.size
-        aspect = h / w
-        
-        target_height_chars = int(target_width * aspect * 0.5)
-        target_height_px = target_height_chars * 2
-        
-        img = img.resize((target_width, target_height_px), PILImage.Resampling.BILINEAR)
-        data = img.load()
-        
-        lines = []
-        for y in range(0, target_height_px, 2):
-            row = []
-            for x in range(target_width):
-                # Top pixel
-                r1, g1, b1 = data[x, y]
-                # Bottom pixel
-                r2, g2, b2 = data[x, y+1] if y+1 < target_height_px else (0,0,0)
-                
-                # TrueColor ANSI: 
-                # FG (Bottom pixel) = \033[38;2;R;G;Bm
-                # BG (Top pixel) = \033[48;2;R;G;Bm
-                # Character = ▄ (U+2584)
-                
-                pixel = f"\033[38;2;{r2};{g2};{b2}m\033[48;2;{r1};{g1};{b1}m▄\033[0m"
-                row.append(pixel)
-            lines.append("".join(row))
-        
-        return "\n".join(lines)
-
-    except Exception as e:
-        return f"[Image Rendering Failed: {e}]"
+BRODA_SIGNATURE = """
+[bold magenta]              ▄▄▄▄▄
+             █[bold cyan]▀   ▀[bold magenta]█
+            █[bold cyan]▀     ▀[bold magenta]█
+           █[bold cyan]▀   [bold magenta]◕[bold cyan]   ▀[bold magenta]█          [bold yellow]~ Broda Spud ~[bold magenta]
+          █[bold cyan]▀   [bold yellow]▔▔▔[bold cyan]   ▀[bold magenta]█         [bold cyan]⟨ Sentient Potato Entity ⟩[bold magenta]
+          █[bold cyan]▀   [bold red]▂▂▂[bold cyan]   ▀[bold magenta]█         [bold magenta]⟨ DEVO Disciple ⟩[bold magenta]
+           ▀[bold cyan]█▄▄▄▄▄▄▄█[bold magenta]▀          [bold green]⟨ Friend to Humans ⟩[bold magenta]
+             ▀▀▀▀▀▀▀             [bold yellow]⚡ xoxoxox ⚡[/]
+"""

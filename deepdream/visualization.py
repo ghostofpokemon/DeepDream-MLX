@@ -32,18 +32,14 @@ BOLD = "\033[1m"
 DIM = "\033[2m"
 ITALIC = "\033[3m"
 
-def print_header(title):
-    c_cyan = FuturistPalette.rgb(*FuturistPalette.CYAN)
-    c_blue = FuturistPalette.rgb(*FuturistPalette.BLUE)
-    c_pink = FuturistPalette.rgb(*FuturistPalette.PINK)
-    
-    # Neoclassical Border
-    print(f"\n{c_cyan}╔{'═'*70}╗{RESET}")
-    print(f"{c_cyan}║{' '*70}║{RESET}")
-    print(f"{c_cyan}║ {c_pink}{BOLD}{title.center(68)}{RESET}{c_cyan} ║{RESET}")
-    print(f"{c_cyan}║ {c_blue}{ITALIC}{'FUTURIST • BEAUX-ARTS • ARCHITECTURE'.center(68)}{RESET}{c_cyan} ║{RESET}")
-    print(f"{c_cyan}║{' '*70}║{RESET}")
-    print(f"{c_cyan}╠{'═'*70}╣{RESET}")
+def print_header(title: str):
+    """
+    Prints a simple header box.
+    """
+    border = "═" * (len(title) + 4)
+    print(f"\n╔{border}╗")
+    print(f"║  {title}  ║")
+    print(f"╚{border}╝\n")
 
 def print_footer(params):
     c_cyan = FuturistPalette.rgb(*FuturistPalette.CYAN)

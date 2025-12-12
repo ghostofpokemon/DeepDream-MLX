@@ -1,12 +1,25 @@
-#!/usr/bin/env python3
 import argparse
 import os
+import sys
 import time
 from datetime import datetime
 
 from PIL import Image
 
 from deepdream import list_models, load_image, run_dream
+from deepdream.term_image import print_image
+from rich.console import Console
+from rich.theme import Theme
+
+custom_theme = Theme({
+    "info": "cyan",
+    "warning": "magenta",
+    "danger": "bold red",
+    "success": "bold green",
+    "title": "bold purple",
+    "highlight": "bold pink1",
+})
+console = Console(theme=custom_theme)
 
 
 def parse_args():
@@ -71,13 +84,13 @@ def parse_args():
 
 
 def run_dream_for_model(model_name, args, img_np):
-    print(f"--- Running DeepDream with {model_name} ---")
+    console.print(f"[bold cyan]--- Running DeepDream with [white]{model_name}[/white] ---[/bold cyan]")
     if args.preset and model_name not in ("vgg16", "vgg19"):
         raise ValueError(f"Presets only supported for VGG models, not '{model_name}'")
 
     guide_np = load_image(args.guide, args.width) if args.guide else None
     if args.guide:
-        print(f"Using guide image: {args.guide}")
+        console.print(f"[italic]Using guide image: {args.guide}[/italic]")
 
     start_time = time.time()
     start_timestamp = datetime.now()
@@ -108,21 +121,29 @@ def run_dream_for_model(model_name, args, img_np):
         out_path = f"{base_name}_dream_{model_name}_{formatted_time}_{formatted_date}_{formatted_timestamp}.jpg"
 
     Image.fromarray(dreamed).save(out_path)
-    print(f"Saved {out_path}")
-    print(f"Layers: {meta['layers']} | Weights: {meta['weights']}\n")
+    console.print(f"[success]Saved {out_path}[/success]")
+    console.print(f"[dim]Layers: {meta['layers']} | Weights: {meta['weights']}[/dim]\n")
+    
+    # Print inline image if compatible terminal
+    if sys.stdout.isatty():
+        print_image(out_path)
 
 
 from deepdream.visualization import print_header
 
 def main():
-    print_header("DEEP DREAM MLX")
+    # print_header("DEEP DREAM MLX") # Using rich header instead
+    console.print("[bold pink1]╔══════════════════════════════════════════════╗[/bold pink1]")
+    console.print("[bold pink1]║             [cyan]DEEP DREAM MLX[/cyan]                   ║[/bold pink1]")
+    console.print("[bold pink1]╚══════════════════════════════════════════════╝[/bold pink1]")
+    
     args = parse_args()
     img_np = load_image(args.input, args.width)
 
     if args.model == "all":
         models = list_models()
         if args.output:
-            print("Warning: --output ignored when --model=all; generating unique names instead.")
+            console.print("[warning]Warning: --output ignored when --model=all; generating unique names instead.[/warning]")
             args.output = None
         for m in models:
             run_dream_for_model(m, args, img_np)
